@@ -26,6 +26,7 @@ class Settings:
     app_name: str = os.getenv("TRADER_APP_NAME", "Trader")
     environment: str = os.getenv("TRADER_ENV", "development")
     debug: bool = _read_bool("TRADER_DEBUG", True)
+    database_path: str = os.getenv("TRADER_DATABASE_PATH", "instance/trader.db")
     market_cache_ttl_seconds: int = _read_int("TRADER_MARKET_CACHE_TTL_SECONDS", 60)
     sentiment_cache_ttl_seconds: int = _read_int("TRADER_SENTIMENT_CACHE_TTL_SECONDS", 300)
     recommendation_cache_ttl_seconds: int = _read_int("TRADER_RECOMMENDATION_CACHE_TTL_SECONDS", 120)
@@ -38,6 +39,7 @@ class Settings:
             "app_name": self.app_name,
             "environment": self.environment,
             "debug": self.debug,
+            "database_path": self.database_path,
             "market_cache_ttl_seconds": self.market_cache_ttl_seconds,
             "sentiment_cache_ttl_seconds": self.sentiment_cache_ttl_seconds,
             "recommendation_cache_ttl_seconds": self.recommendation_cache_ttl_seconds,
