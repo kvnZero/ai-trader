@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Trader{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/styles.css') }}" />
+  </head>
+  <body class="min-h-screen bg-stone-950 text-stone-100 antialiased">
+    {% block body %}{% endblock %}
+  </body>
+</html>

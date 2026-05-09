@@ -1,0 +1,20 @@
+{
+  "name": "trader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tailwind CSS pipeline for the Trader Flask application",
+  "scripts": {
+    "dev": "npx @tailwindcss/cli -i ./app/static/src/input.css -o ./app/static/dist/styles.css --watch",
+    "build": "npx @tailwindcss/cli -i ./app/static/src/input.css -o ./app/static/dist/styles.css --minify"
+  },
+  "keywords": [
+    "flask",
+    "tailwindcss",
+    "uv"
+  ],
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "tailwindcss": "^4.3.0"
+  }
+}
