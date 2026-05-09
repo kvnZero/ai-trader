@@ -54,6 +54,8 @@ The user has explicitly authorized proactive requirement derivation. Future impl
 - Recommendation outputs should prefer `buy`, `sell`, `watch`, and `avoid` style judgments with evidence and risk notes.
 - Recommendations must remain explainable, evidence-based, and traceable to underlying market data and sentiment items.
 - The system should be designed so deterministic scoring and LLM reasoning can be compared side by side.
+- The web platform is a primary operating surface, not a secondary demo layer.
+- Users must be able to maintain a personal watchlist of focus stocks and keep them under active monitoring during configured market hours.
 
 ## Financial Design Constraints
 
@@ -63,6 +65,17 @@ The user has explicitly authorized proactive requirement derivation. Future impl
 - Treat conflicting evidence explicitly rather than forcing a single-direction bullish interpretation.
 - Prefer conservative confidence scoring when entity mapping or sentiment attribution is ambiguous.
 - Always preserve enough structured evidence for later review of why a recommendation was produced.
+- Default market-hour monitoring should align with A-share sessions on trading days and pause outside those windows unless the user explicitly overrides it.
+
+## Monitoring Requirements
+
+- Support a user-managed watchlist of stocks under continuous recommendation monitoring.
+- Monitoring must have an explicit on/off switch.
+- The default monitoring schedule should be limited to A-share market hours on trading days.
+- During active monitoring, the platform should refresh analysis and recommendation outputs repeatedly on a configured cadence.
+- The UI must clearly show current monitoring state, last refresh time, latest recommendation, and whether monitoring is paused because the market is closed.
+- Recommendation changes for watched stocks should produce in-site unread alerts.
+- In-site alerts should escalate to a blinking page title until the user has read or acknowledged the new content.
 
 ## Derived Capability Guidance
 

@@ -10,6 +10,7 @@ Build an AI-assisted A-share investment research system with independently deliv
 4. Mapping sentiment items to affected listed companies
 5. A trader agent with financial domain reasoning
 6. Explainable buy / sell / watch recommendations
+7. Watchlist-driven monitoring during market hours with continuous recommendation refresh
 
 ## Delivery Principles
 
@@ -20,6 +21,7 @@ Build an AI-assisted A-share investment research system with independently deliv
 5. External data adapters must account for rate limits, missing fields, retries, caching, and source instability.
 6. Implementation cadence must follow small-feature commits: complete one small functional unit, commit it, then move to the next.
 7. Ambiguous product details should be completed proactively using sound financial-system design judgment.
+8. User-facing monitoring and alerting should surface unread recommendation changes clearly enough that important updates are not silently missed.
 
 ## Module Boundaries
 
@@ -31,6 +33,7 @@ Build an AI-assisted A-share investment research system with independently deliv
 | `entity_mapping` | Map content to listed companies and stock codes | Normalized content, company dictionary | Affected company list, confidence score, matched evidence |
 | `trader_agent` | Reason over structured signals with financial knowledge | Market analysis, sentiment summary, metadata | Buy/sell/watch proposal with rationale |
 | `recommendation_engine` | Fuse deterministic scores and agent output | Technical signals, sentiment impact, agent result | Final recommendation, confidence, risk notes |
+| `watchlist_monitoring` | Track user-selected stocks over time and refresh recommendations | Watchlist config, schedule, market-hour rules | Monitoring state, refreshed recommendations, unread alerts |
 | `delivery_api` | Expose pages/API/tasks for internal use | Requests from UI or scheduler | JSON/API responses and rendered pages |
 
 ## Task List
@@ -179,6 +182,7 @@ Expose the independent capabilities through Flask pages and API endpoints for in
 - API endpoints for market query, technical analysis, sentiment query, entity mapping, agent recommendation, and final fused recommendation
 - Minimal pages/dashboard for manual verification
 - Background task entry points for polling and refresh jobs
+- Watchlist management, monitoring status surfaces, and unread in-site alert presentation
 
 **Acceptance Criteria**
 
@@ -186,7 +190,45 @@ Expose the independent capabilities through Flask pages and API endpoints for in
 - A developer can trigger a single module without running the full pipeline
 - API responses follow the shared schema contracts
 
-### T009. Scheduling, Persistence, and Cache Module
+### T009. Watchlist Monitoring Module
+
+**Goal**
+
+Allow users to choose focus stocks, monitor them during market hours, and keep recommendations refreshed over time.
+
+**Deliverables**
+
+- Watchlist data model and management actions
+- Monitoring switch and default A-share trading-session schedule
+- Refresh cadence policy for watched stocks
+- Monitoring status output with latest recommendation, last analysis time, and pause reasons
+
+**Acceptance Criteria**
+
+- A user can define a list of watched stocks and toggle monitoring on or off
+- Monitoring defaults to A-share market hours on trading days unless explicitly overridden
+- The system can explain whether monitoring is active, paused, or stale for each watched stock
+
+### T010. In-Site Alerting and Read-State Module
+
+**Goal**
+
+Ensure meaningful recommendation changes are visible inside the platform and hard to miss until reviewed.
+
+**Deliverables**
+
+- Unread alert model for watchlist recommendation changes
+- In-site alert center or dashboard card
+- Browser-page title blinking for unread high-signal updates
+- Read/acknowledge state handling
+
+**Acceptance Criteria**
+
+- A recommendation change on a watched stock creates an unread alert
+- The page title visually alternates until the user reads or acknowledges the alert
+- The UI distinguishes unread vs acknowledged alert state
+
+### T011. Scheduling, Persistence, and Cache Module
 
 **Goal**
 
@@ -205,7 +247,7 @@ Support polling, snapshot retention, and repeatable analysis runs.
 - Polling jobs can run without blocking page requests
 - Cache and persistence policies are configurable per module
 
-### T010. Evaluation and Risk-Control Module
+### T012. Evaluation and Risk-Control Module
 
 **Goal**
 
@@ -234,8 +276,10 @@ Ensure the system is measurable, explainable, and controlled before heavier auto
 6. `T006` Trader Agent Module
 7. `T007` Recommendation Engine Module
 8. `T008` Delivery API and UI Module
-9. `T009` Scheduling, Persistence, and Cache Module
-10. `T010` Evaluation and Risk-Control Module
+9. `T009` Watchlist Monitoring Module
+10. `T010` In-Site Alerting and Read-State Module
+11. `T011` Scheduling, Persistence, and Cache Module
+12. `T012` Evaluation and Risk-Control Module
 
 ## Commit Discipline
 
@@ -265,10 +309,15 @@ Ensure the system is measurable, explainable, and controlled before heavier auto
 - Complete `T006` and `T007`
 - Outcome: generate explainable buy/sell/watch recommendations from structured evidence
 
-### Milestone D: Product Delivery and Reliability
+### Milestone D: Product Delivery and Monitoring
 
 - Complete `T008`, `T009`, and `T010`
-- Outcome: expose usable endpoints/pages and make the pipeline observable and reviewable
+- Outcome: expose usable pages, monitor watched stocks, and surface unread recommendation changes clearly
+
+### Milestone E: Reliability and Governance
+
+- Complete `T011` and `T012`
+- Outcome: make the pipeline observable, reviewable, and production-ready enough for ongoing usage
 
 ## Current Scope Notes
 
@@ -276,3 +325,4 @@ Ensure the system is measurable, explainable, and controlled before heavier auto
 2. Sentiment collection source choices must consider compliance, source terms, and technical accessibility.
 3. The first version should prioritize explainability and modularity over full automation.
 4. The system should proactively include adjacent expert capabilities when they materially improve recommendation quality, such as risk controls, sector/theme context, data staleness handling, and evidence traceability.
+5. Watchlist monitoring should default to in-site use first, with external notification channels deferred until the in-site alert flow is reliable.
