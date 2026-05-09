@@ -242,11 +242,17 @@ class TraderAgentInputAssembler:
         )
         ranked_positive = sorted(
             (entry for entry in scored_items if entry[1] >= 0.15),
-            key=lambda entry: (-(entry[1] * entry[2]), entry[0].published_at),
+            key=lambda entry: (
+                -(entry[1] * entry[2]),
+                self._normalize_datetime(entry[0].published_at),
+            ),
         )
         ranked_negative = sorted(
             (entry for entry in scored_items if entry[1] <= -0.15),
-            key=lambda entry: (entry[1] * entry[2], entry[0].published_at),
+            key=lambda entry: (
+                entry[1] * entry[2],
+                self._normalize_datetime(entry[0].published_at),
+            ),
         )
         timestamps = [self._normalize_datetime(item.published_at) for item in sentiment_items]
         attribution_warnings = self._build_attribution_warnings(
