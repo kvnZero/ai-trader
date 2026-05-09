@@ -38,10 +38,15 @@ def index() -> str:
 def dashboard() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
+    watchlist = _build_watchlist_preview()
+    alerts = _build_unread_alert_preview()
     return render_template(
         "dashboard.html",
         capabilities=capabilities,
         settings=settings,
+        watchlist=watchlist,
+        alerts=alerts,
+        alerts_for_title=alerts,
         navigation=_WEB_NAVIGATION,
         active_nav="core.dashboard",
     )
@@ -177,3 +182,66 @@ def _status_from_market_result(result: MarketDataResult[object]) -> int:
     if issue.code == "market_data_unavailable":
         return 503 if result.data in (None, [], ()) else 200
     return 200 if result.data not in (None, [], ()) else 500
+
+
+def _build_watchlist_preview() -> list[dict[str, object]]:
+    return [
+        {
+            "symbol": "600519",
+            "name": "贵州茅台",
+            "monitoring_enabled": True,
+            "market_window": "工作日 09:30-11:30 / 13:00-15:00",
+            "status": "active",
+            "status_label": "监控中",
+            "last_analysis_at": "10:28",
+            "recommendation": "buy",
+            "confidence": 0.78,
+            "reason": "趋势延续，消费龙头情绪稳定，量价结构未破坏。",
+            "unread": True,
+        },
+        {
+            "symbol": "300750",
+            "name": "宁德时代",
+            "monitoring_enabled": True,
+            "market_window": "工作日 09:30-11:30 / 13:00-15:00",
+            "status": "paused",
+            "status_label": "闭市暂停",
+            "last_analysis_at": "15:01",
+            "recommendation": "watch",
+            "confidence": 0.55,
+            "reason": "波动放大，等待新的趋势确认，暂不追价。",
+            "unread": False,
+        },
+        {
+            "symbol": "688981",
+            "name": "中芯国际",
+            "monitoring_enabled": False,
+            "market_window": "自定义关闭",
+            "status": "disabled",
+            "status_label": "未开启",
+            "last_analysis_at": "09:12",
+            "recommendation": "avoid",
+            "confidence": 0.41,
+            "reason": "当前监控关闭，仅保留上次建议记录。",
+            "unread": False,
+        },
+    ]
+
+
+def _build_unread_alert_preview() -> list[dict[str, object]]:
+    return [
+        {
+            "symbol": "600519",
+            "title": "贵州茅台建议从 WATCH 调整为 BUY",
+            "summary": "技术结构重新转强，舆情面没有新增利空。",
+            "time": "2 分钟前",
+            "level": "high",
+        },
+        {
+            "symbol": "002594",
+            "title": "比亚迪舆情热度上升",
+            "summary": "快讯密度提升，但建议尚未变更。",
+            "time": "11 分钟前",
+            "level": "medium",
+        },
+    ]

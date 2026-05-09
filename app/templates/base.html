@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{% block title %}Trader{% endblock %}</title>
+    <title id="page-title">{% block title %}Trader{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='dist/styles.css') }}" />
   </head>
   <body class="min-h-screen bg-[linear-gradient(180deg,_rgba(8,12,18,1),_rgba(14,23,33,1)_35%,_rgba(8,12,18,1))] text-slate-100 antialiased">
@@ -63,5 +63,48 @@
         </div>
       </div>
     </div>
+    {% if alerts_for_title is defined and alerts_for_title %}
+      <script>
+        (() => {
+          const originalTitle = document.title;
+          const unreadCount = {{ alerts_for_title | length }};
+          const alertTitle = `(${unreadCount}) 新监控提醒`;
+          let acknowledged = false;
+          let blinkOn = false;
+          let timerId = null;
+
+          const stopBlink = () => {
+            if (timerId !== null) {
+              window.clearInterval(timerId);
+              timerId = null;
+            }
+            document.title = originalTitle;
+          };
+
+          const acknowledge = () => {
+            if (acknowledged) {
+              return;
+            }
+            acknowledged = true;
+            stopBlink();
+          };
+
+          timerId = window.setInterval(() => {
+            blinkOn = !blinkOn;
+            document.title = blinkOn ? alertTitle : originalTitle;
+          }, 1200);
+
+          document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) {
+              acknowledge();
+            }
+          });
+
+          window.addEventListener("focus", acknowledge, { once: true });
+          document.addEventListener("click", acknowledge, { once: true });
+          window.addEventListener("beforeunload", stopBlink);
+        })();
+      </script>
+    {% endif %}
   </body>
 </html>
