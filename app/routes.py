@@ -13,6 +13,7 @@ from app.modules.technical_analysis import (
     TechnicalAnalysisValidationError,
     build_default_technical_analysis_service,
 )
+from app.persistence import AlertRepository, WatchlistRepository
 
 bp = Blueprint("core", __name__)
 
@@ -29,6 +30,14 @@ def _settings() -> Settings:
     return current_app.config["TRADER_SETTINGS"]
 
 
+def _watchlist_repository() -> WatchlistRepository:
+    return current_app.config["TRADER_WATCHLIST_REPOSITORY"]
+
+
+def _alert_repository() -> AlertRepository:
+    return current_app.config["TRADER_ALERT_REPOSITORY"]
+
+
 @bp.get("/")
 def index() -> str:
     return dashboard()
@@ -38,8 +47,8 @@ def index() -> str:
 def dashboard() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
-    watchlist = _build_watchlist_preview()
-    alerts = _build_unread_alert_preview()
+    watchlist = _build_watchlist_view_models()
+    alerts = _build_alert_view_models()
     return render_template(
         "dashboard.html",
         capabilities=capabilities,
@@ -184,64 +193,37 @@ def _status_from_market_result(result: MarketDataResult[object]) -> int:
     return 200 if result.data not in (None, [], ()) else 500
 
 
-def _build_watchlist_preview() -> list[dict[str, object]]:
+def _build_watchlist_view_models() -> list[dict[str, object]]:
+    unread_symbols = {alert.symbol for alert in _alert_repository().list_unread()}
+    rows = _watchlist_repository().list_rows()
     return [
         {
-            "symbol": "600519",
-            "name": "贵州茅台",
-            "monitoring_enabled": True,
-            "market_window": "工作日 09:30-11:30 / 13:00-15:00",
-            "status": "active",
-            "status_label": "监控中",
-            "last_analysis_at": "10:28",
-            "recommendation": "buy",
-            "confidence": 0.78,
-            "reason": "趋势延续，消费龙头情绪稳定，量价结构未破坏。",
-            "unread": True,
-        },
-        {
-            "symbol": "300750",
-            "name": "宁德时代",
-            "monitoring_enabled": True,
-            "market_window": "工作日 09:30-11:30 / 13:00-15:00",
-            "status": "paused",
-            "status_label": "闭市暂停",
-            "last_analysis_at": "15:01",
-            "recommendation": "watch",
-            "confidence": 0.55,
-            "reason": "波动放大，等待新的趋势确认，暂不追价。",
-            "unread": False,
-        },
-        {
-            "symbol": "688981",
-            "name": "中芯国际",
-            "monitoring_enabled": False,
-            "market_window": "自定义关闭",
-            "status": "disabled",
-            "status_label": "未开启",
-            "last_analysis_at": "09:12",
-            "recommendation": "avoid",
-            "confidence": 0.41,
-            "reason": "当前监控关闭，仅保留上次建议记录。",
-            "unread": False,
-        },
+            "symbol": row.symbol,
+            "name": row.name,
+            "monitoring_enabled": row.monitoring_enabled,
+            "market_window": row.schedule_label,
+            "status": row.status,
+            "status_label": row.status_label,
+            "last_analysis_at": row.last_analysis_at or "--",
+            "recommendation": row.latest_recommendation,
+            "confidence": row.latest_confidence,
+            "reason": row.latest_reason,
+            "unread": row.symbol in unread_symbols,
+        }
+        for row in rows
     ]
 
 
-def _build_unread_alert_preview() -> list[dict[str, object]]:
+def _build_alert_view_models() -> list[dict[str, object]]:
+    rows = _alert_repository().list_unread()
     return [
         {
-            "symbol": "600519",
-            "title": "贵州茅台建议从 WATCH 调整为 BUY",
-            "summary": "技术结构重新转强，舆情面没有新增利空。",
-            "time": "2 分钟前",
-            "level": "high",
-        },
-        {
-            "symbol": "002594",
-            "title": "比亚迪舆情热度上升",
-            "summary": "快讯密度提升，但建议尚未变更。",
-            "time": "11 分钟前",
-            "level": "medium",
-        },
+            "id": row.id,
+            "symbol": row.symbol,
+            "title": row.title,
+            "summary": row.summary,
+            "time": row.created_at,
+            "level": row.level,
+        }
+        for row in rows
     ]
