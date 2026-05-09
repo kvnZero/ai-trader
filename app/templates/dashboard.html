@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}总览 | Trader{% endblock %}
+
+{% block body %}
+  <section class="space-y-6">
+    <header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <p class="text-xs uppercase tracking-[0.24em] text-emerald-300/80">Dashboard</p>
+        <h2 class="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+          用一个统一界面观察市场、舆情与交易员建议链路。
+        </h2>
+        <p class="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
+          第一阶段先建立可操作的平台骨架，让总览、研究、舆情、建议和系统能力各自独立承载后续模块。
+        </p>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-3">
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-900/60 px-4 py-4">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Environment</p>
+          <p class="mt-2 text-lg font-semibold text-white">{{ settings.environment }}</p>
+        </div>
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-900/60 px-4 py-4">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Market TTL</p>
+          <p class="mt-2 text-lg font-semibold text-white">{{ settings.market_cache_ttl_seconds }}s</p>
+        </div>
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-900/60 px-4 py-4">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Sentiment TTL</p>
+          <p class="mt-2 text-lg font-semibold text-white">{{ settings.sentiment_cache_ttl_seconds }}s</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <section class="rounded-[2rem] border border-slate-800/80 bg-[linear-gradient(135deg,_rgba(15,23,42,0.9),_rgba(3,7,18,0.86))] p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Platform Focus</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">模块化 A 股投研工作台</h3>
+          </div>
+          <a href="{{ url_for('core.research') }}" class="rounded-full border border-emerald-400/30 bg-emerald-300/10 px-5 py-2 text-sm font-medium text-emerald-100">
+            进入研究页
+          </a>
+        </div>
+        <div class="mt-6 grid gap-4 md:grid-cols-2">
+          <article class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Research Flow</p>
+            <p class="mt-3 text-sm leading-7 text-slate-300">
+              先拉取行情，再做技术分析，接着引入舆情与公司映射，最后由交易员智能体和推荐引擎完成解释型建议。
+            </p>
+          </article>
+          <article class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Design Principle</p>
+            <p class="mt-3 text-sm leading-7 text-slate-300">
+              所有模块保持独立可调用，Web 平台只是统一操作面板，不把底层能力耦合成黑盒。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Capability Status</p>
+        <div class="mt-4 space-y-3">
+          {% for capability in capabilities %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 px-4 py-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h3 class="text-sm font-semibold text-white">{{ capability.title }}</h3>
+                  <p class="mt-1 text-sm text-slate-400">{{ capability.description }}</p>
+                </div>
+                {% if capability.enabled %}
+                  <span class="rounded-full bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">Enabled</span>
+                {% else %}
+                  <span class="rounded-full bg-slate-300/10 px-3 py-1 text-xs font-medium text-slate-300">Disabled</span>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <section class="grid gap-4 lg:grid-cols-3">
+      <a href="{{ url_for('core.research') }}" class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6 transition hover:border-slate-700 hover:bg-slate-900/80">
+        <p class="text-xs uppercase tracking-[0.22em] text-sky-300/80">Research</p>
+        <h3 class="mt-3 text-2xl font-semibold text-white">个股研究页</h3>
+        <p class="mt-3 text-sm leading-7 text-slate-300">输入股票代码或名称，集中查看行情、技术信号、舆情影响和最终建议。</p>
+      </a>
+      <a href="{{ url_for('core.sentiment') }}" class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6 transition hover:border-slate-700 hover:bg-slate-900/80">
+        <p class="text-xs uppercase tracking-[0.22em] text-amber-300/80">Sentiment</p>
+        <h3 class="mt-3 text-2xl font-semibold text-white">舆情监控页</h3>
+        <p class="mt-3 text-sm leading-7 text-slate-300">跟踪财经内容与快讯，观察它们如何映射到上市公司和主题板块。</p>
+      </a>
+      <a href="{{ url_for('core.recommendations') }}" class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6 transition hover:border-slate-700 hover:bg-slate-900/80">
+        <p class="text-xs uppercase tracking-[0.22em] text-rose-300/80">Trader Agent</p>
+        <h3 class="mt-3 text-2xl font-semibold text-white">交易员建议页</h3>
+        <p class="mt-3 text-sm leading-7 text-slate-300">把技术证据、舆情证据和交易员解释拆开呈现，避免推荐变成黑盒结论。</p>
+      </a>
+    </section>
+  </section>
+{% endblock %}

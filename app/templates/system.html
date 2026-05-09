@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}系统能力 | Trader{% endblock %}
+
+{% block body %}
+  <section class="space-y-6">
+    <header class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <p class="text-xs uppercase tracking-[0.24em] text-emerald-300/80">System Capability</p>
+      <h2 class="mt-3 text-4xl font-semibold tracking-tight text-white">系统能力页</h2>
+      <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
+        用于调试、验收和观察各模块状态，保证平台不是只有前端展示，而是每个底层能力都能被单独审视。
+      </p>
+    </header>
+
+    <div class="grid gap-4 xl:grid-cols-2">
+      {% for capability in capabilities %}
+        <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+          <div class="flex items-center justify-between gap-4">
+            <h3 class="text-xl font-semibold text-white">{{ capability.title }}</h3>
+            {% if capability.enabled %}
+              <span class="rounded-full bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">Enabled</span>
+            {% else %}
+              <span class="rounded-full bg-slate-300/10 px-3 py-1 text-xs font-medium text-slate-300">Disabled</span>
+            {% endif %}
+          </div>
+          <p class="mt-3 text-sm leading-7 text-slate-300">{{ capability.description }}</p>
+          <p class="mt-4 text-xs uppercase tracking-[0.22em] text-slate-500">{{ capability.owner_module }}</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

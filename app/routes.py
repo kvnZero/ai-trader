@@ -16,6 +16,14 @@ from app.modules.technical_analysis import (
 
 bp = Blueprint("core", __name__)
 
+_WEB_NAVIGATION = (
+    {"endpoint": "core.dashboard", "label": "总览", "description": "Dashboard"},
+    {"endpoint": "core.research", "label": "个股研究", "description": "Research"},
+    {"endpoint": "core.sentiment", "label": "舆情监控", "description": "Sentiment"},
+    {"endpoint": "core.recommendations", "label": "交易员建议", "description": "Agent"},
+    {"endpoint": "core.system_capabilities", "label": "系统能力", "description": "System"},
+)
+
 
 def _settings() -> Settings:
     return current_app.config["TRADER_SETTINGS"]
@@ -23,9 +31,60 @@ def _settings() -> Settings:
 
 @bp.get("/")
 def index() -> str:
+    return dashboard()
+
+
+@bp.get("/dashboard")
+def dashboard() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
-    return render_template("index.html", capabilities=capabilities, settings=settings)
+    return render_template(
+        "dashboard.html",
+        capabilities=capabilities,
+        settings=settings,
+        navigation=_WEB_NAVIGATION,
+        active_nav="core.dashboard",
+    )
+
+
+@bp.get("/research")
+def research() -> str:
+    return render_template(
+        "research.html",
+        navigation=_WEB_NAVIGATION,
+        active_nav="core.research",
+    )
+
+
+@bp.get("/sentiment")
+def sentiment() -> str:
+    return render_template(
+        "sentiment.html",
+        navigation=_WEB_NAVIGATION,
+        active_nav="core.sentiment",
+    )
+
+
+@bp.get("/recommendations")
+def recommendations() -> str:
+    return render_template(
+        "recommendations.html",
+        navigation=_WEB_NAVIGATION,
+        active_nav="core.recommendations",
+    )
+
+
+@bp.get("/system")
+def system_capabilities() -> str:
+    settings = _settings()
+    capabilities = build_capability_catalog(settings)
+    return render_template(
+        "system.html",
+        capabilities=capabilities,
+        settings=settings,
+        navigation=_WEB_NAVIGATION,
+        active_nav="core.system_capabilities",
+    )
 
 
 @bp.get("/api/health")
