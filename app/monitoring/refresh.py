@@ -5,7 +5,10 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
+from app.modules.entity_mapping import build_default_entity_mapping_service
 from app.modules.market_data import build_default_market_data_service
+from app.modules.recommendation_engine import build_default_recommendation_engine_service
+from app.modules.sentiment_ingestion import build_default_sentiment_service
 from app.modules.technical_analysis import build_default_technical_analysis_service
 from app.persistence.alerts import AlertRepository
 from app.persistence.recommendation_events import RecommendationEventRepository
@@ -28,6 +31,7 @@ class RefreshOutcome:
 
 class WatchlistRefreshService:
     MIN_REFRESH_GAP_SECONDS = 180
+    LOW_CONFIDENCE_FLOOR = 0.34
 
     def __init__(
         self,
@@ -43,6 +47,9 @@ class WatchlistRefreshService:
         self.recommendation_event_repository = recommendation_event_repository
         self.market_service = build_default_market_data_service()
         self.technical_service = build_default_technical_analysis_service()
+        self.sentiment_service = build_default_sentiment_service()
+        self.entity_mapping_service = build_default_entity_mapping_service()
+        self.recommendation_engine = build_default_recommendation_engine_service()
         self._last_refresh_at: dict[str, datetime] = {}
 
     def refresh_symbol(self, symbol: str, *, source: str) -> RefreshOutcome | None:
@@ -130,9 +137,32 @@ class WatchlistRefreshService:
             return outcome
 
         analysis_result = self.technical_service.analyze_bars(bars_result.data)
-        recommendation = "buy" if analysis_result.bullish_score >= analysis_result.bearish_score else "watch"
-        confidence = max(analysis_result.bullish_score, analysis_result.bearish_score)
-        reason = analysis_result.signals[0].summary if analysis_result.signals else "基于当前技术结构刷新建议。"
+        sentiment_result = self.sentiment_service.ingest()
+        company_matches = []
+        sentiment_items = []
+        for item in sentiment_result.items:
+            matches = self.entity_mapping_service.map_sentiment_item(item, min_confidence=0.18, max_matches=3)
+            for match in matches:
+                if match.company.symbol == row.symbol:
+                    sentiment_items.append(item)
+                    company_matches.append(match)
+                    break
+
+        bundle = self.recommendation_engine.build_recommendation_bundle(
+            symbol=row.symbol,
+            technical_signals=list(analysis_result.signals),
+            sentiment_items=sentiment_items,
+            company_matches=company_matches,
+            evaluation_at=snapshot_result.data.captured_at,
+        )
+        recommendation = bundle.recommendation.action.value
+        confidence = bundle.recommendation.confidence
+        reason = bundle.recommendation.summary
+
+        if confidence < self.LOW_CONFIDENCE_FLOOR:
+            recommendation = "watch" if recommendation != "sell" else "avoid"
+            reason = f"信号质量不足，降级处理：{reason}"
+
         outcome = RefreshOutcome(
             symbol=row.symbol,
             changed=recommendation != previous_recommendation,
