@@ -174,6 +174,7 @@ def recommendations() -> str:
     return render_template(
         "recommendations.html",
         workspace=workspace,
+        event_watch=_build_market_event_watch(),
         navigation=_WEB_NAVIGATION,
         active_nav="core.recommendations",
     )
@@ -415,6 +416,50 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "recent_activity": recent_activity,
         "alerts": alerts,
     }
+
+
+def _build_market_event_watch() -> list[dict[str, object]]:
+    settings = _settings()
+    now = datetime.now(ZoneInfo(settings.market_timezone))
+    events: list[dict[str, object]] = []
+
+    if now.day >= 25:
+        events.append(
+            {
+                "title": "月末资金再平衡窗口",
+                "detail": "月底附近容易出现仓位调整和资金再平衡，追价需更谨慎。",
+                "level": "medium",
+            }
+        )
+
+    if now.month in {1, 4, 7, 10}:
+        events.append(
+            {
+                "title": "财报 / 业绩预告季",
+                "detail": "季度披露窗口，关注业绩预告、公告和预期差。",
+                "level": "high",
+            }
+        )
+
+    if now.weekday() >= 3:
+        events.append(
+            {
+                "title": "临近周末风险窗口",
+                "detail": "周末前后容易出现消息面和公告扰动，建议收敛仓位。",
+                "level": "medium",
+            }
+        )
+
+    if now.weekday() == 0:
+        events.append(
+            {
+                "title": "周初重新定价",
+                "detail": "周初资金重新定价，短线追涨需结合确认度。",
+                "level": "low",
+            }
+        )
+
+    return events[:4]
 
 
 def _build_recommendation_event_history(
