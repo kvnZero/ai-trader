@@ -357,6 +357,24 @@
 
         <p class="mt-4 text-sm leading-7 text-slate-300">{{ workspace.technical.message or "技术分析基于最近K线、均线结构、动量和量价关系生成。" }}</p>
 
+        <div class="mt-5 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Market Regime Summary</p>
+          <div class="mt-3 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3">
+              <p class="text-xs uppercase tracking-[0.16em] text-slate-500">阶段标签</p>
+              <p class="mt-2 text-sm font-medium text-white">{{ workspace.technical.market_regime_label or "--" }}</p>
+            </div>
+            <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3">
+              <p class="text-xs uppercase tracking-[0.16em] text-slate-500">阶段值</p>
+              <p class="mt-2 text-sm font-medium text-white">{{ workspace.technical.market_regime or "--" }}</p>
+            </div>
+            <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3">
+              <p class="text-xs uppercase tracking-[0.16em] text-slate-500">确认度</p>
+              <p class="mt-2 text-sm font-medium text-white">{{ workspace.technical.confirmation_score or "--" }}</p>
+            </div>
+          </div>
+        </div>
+
         <div class="mt-5 grid gap-3 sm:grid-cols-3">
           <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
             <p class="text-xs uppercase tracking-[0.18em] text-slate-500">SMA20</p>
