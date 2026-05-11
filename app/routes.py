@@ -1001,6 +1001,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
         "recommendation": _empty_recommendation_summary(),
         "recent_activity": _empty_research_recent_activity_summary(),
         "recommendation_events": [],
+        "sentiment_source_health": None,
         "errors": list(target["issues"]),
     }
 
@@ -1051,7 +1052,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
     else:
         try:
             entity_mapping_service = build_default_entity_mapping_service()
-            sentiment_items, matched_sentiment = _collect_target_sentiment(
+            sentiment_items, matched_sentiment, sentiment_source_health = _collect_target_sentiment(
                 company=target["company"],
                 entity_mapping_service=entity_mapping_service,
             )
@@ -1064,6 +1065,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
             workspace["mapping"]["status"] = "unavailable"
             workspace["mapping"]["message"] = "实体映射暂时不可用，已保留研究页其他结果。"
         else:
+            workspace["sentiment_source_health"] = sentiment_source_health
             workspace["sentiment"] = _build_sentiment_summary(matched_sentiment)
             workspace["mapping"] = _build_mapping_summary(matched_sentiment)
 
@@ -1328,12 +1330,33 @@ def _collect_target_sentiment(
     *,
     company: CompanyReference | None,
     entity_mapping_service: object,
-) -> tuple[list[SentimentItem], list[dict[str, object]]]:
+) -> tuple[list[SentimentItem], list[dict[str, object]], dict[str, object]]:
     if company is None:
-        return [], []
+        return [], [], {
+            "status": "idle",
+            "label": "未采集",
+            "message": "解析到股票后会显示舆情来源健康状态。",
+            "failed_source_count": 0,
+            "total_source_count": 0,
+            "reason_summary": [],
+            "failures": [],
+        }
 
-    sentiment_result = build_default_sentiment_service().ingest(
-        _build_sentiment_sources([company.symbol])
+    sentiment_result = build_default_sentiment_service().ingest(_build_sentiment_sources([company.symbol]))
+    source_runs = [
+        {
+            "source": run.source_metadata.source_name,
+            "category": run.source_metadata.category.value,
+            "fetched": run.fetched_count,
+            "emitted": run.emitted_count,
+            "duplicate": run.duplicate_count,
+            "stale": run.stale_count,
+        }
+        for run in sentiment_result.source_runs
+    ]
+    source_failure_summary = _build_sentiment_failure_summary(
+        ingestion_result=sentiment_result,
+        source_runs=source_runs,
     )
     matched_rows: list[dict[str, object]] = []
     for item in sentiment_result.items:
@@ -1342,7 +1365,7 @@ def _collect_target_sentiment(
             if match.company.symbol == company.symbol:
                 matched_rows.append({"item": item, "match": match})
                 break
-    return [row["item"] for row in matched_rows], matched_rows
+    return [row["item"] for row in matched_rows], matched_rows, source_failure_summary
 
 
 def _build_sentiment_summary(matched_sentiment: list[dict[str, object]]) -> dict[str, object]:
