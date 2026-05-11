@@ -31,6 +31,9 @@ The user has explicitly authorized proactive requirement derivation. Future impl
 - Each commit message should briefly describe the implemented feature in one line.
 - Before starting the next small feature, ensure the current feature is committed.
 - Subagents must also work in small, isolated feature increments that are safe to commit independently.
+- When a task can be split into non-conflicting parts, prefer delegating those parts to separate subagents to increase delivery speed.
+- Only delegate subtasks with disjoint file ownership or clearly isolated responsibilities.
+- Keep the main thread focused on integration, verification, and commit sequencing while subagents handle isolated implementation slices.
 
 ## Current Entry Points
 
