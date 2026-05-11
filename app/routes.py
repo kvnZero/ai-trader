@@ -170,7 +170,8 @@ def system_capabilities() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
     selected_symbol = request.args.get("symbol", "").strip()
-    recent_runs = _build_recent_activity(selected_symbol or None)
+    selected_limit = _get_positive_int_arg("limit", default=8)
+    recent_runs = _build_recent_activity(selected_symbol or None, limit=selected_limit)
     monitoring_status = _monitoring_scheduler().status_snapshot()
     grouped_activity = _group_activity_by_kind(recent_runs)
     activity_summary = _build_activity_summary(recent_runs)
@@ -184,6 +185,7 @@ def system_capabilities() -> str:
         activity_summary=activity_summary,
         monitoring_status=monitoring_status,
         selected_symbol=selected_symbol,
+        selected_limit=selected_limit,
         quick_symbols=quick_symbols,
         navigation=_WEB_NAVIGATION,
         active_nav="core.system_capabilities",
