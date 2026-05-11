@@ -281,6 +281,22 @@ class WatchlistRepository:
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (symbol, status, int(stale), detail, datetime.utcnow().isoformat(timespec="minutes")),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def record_research_note(self, symbol: str, detail: str) -> bool:
+        symbol = symbol.strip()
+        if not symbol:
+            return False
+
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO analysis_runs (symbol, status, stale, detail, created_at)
+                VALUES (?, 'research', 0, ?, ?)
+                """,
+                (symbol, detail, datetime.utcnow().isoformat(timespec="minutes")),
             )
             conn.commit()
         return cursor.rowcount > 0
