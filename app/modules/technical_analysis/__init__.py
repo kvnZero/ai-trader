@@ -1,6 +1,8 @@
 """Deterministic technical analysis capability package."""
 
 from app.modules.technical_analysis.contracts import (
+    MarketRegime,
+    MarketRegimeAssessment,
     TechnicalAnalysisResult,
     TechnicalIndicatorSnapshot,
 )
@@ -15,6 +17,8 @@ from app.modules.technical_analysis.service import (
 
 __all__ = [
     "TechnicalAnalysisError",
+    "MarketRegime",
+    "MarketRegimeAssessment",
     "TechnicalAnalysisResult",
     "TechnicalAnalysisService",
     "TechnicalAnalysisValidationError",

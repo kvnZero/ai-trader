@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from app.domain import MarketBar, SignalDirection, TechnicalSignal
+
+
+class MarketRegime(StrEnum):
+    TREND = "trend"
+    RANGE = "range"
+    PANIC = "panic"
+    REBOUND = "rebound"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +37,15 @@ class TechnicalIndicatorSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class MarketRegimeAssessment:
+    regime: MarketRegime
+    label: str
+    confirmation_score: float
+    summary: str
+    evidence: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
 class TechnicalAnalysisResult:
     symbol: str
     latest_bar: MarketBar
@@ -37,6 +54,7 @@ class TechnicalAnalysisResult:
     market_regime: str
     market_regime_label: str
     confirmation_score: float
+    market_regime_assessment: MarketRegimeAssessment
     indicator_snapshot: TechnicalIndicatorSnapshot
     signals: list[TechnicalSignal] = field(default_factory=list)
     bullish_score: float = 0.0

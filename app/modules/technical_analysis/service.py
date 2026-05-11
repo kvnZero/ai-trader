@@ -6,6 +6,8 @@ from typing import Sequence
 
 from app.domain import MarketBar, SignalDirection, TechnicalSignal
 from app.modules.technical_analysis.contracts import (
+    MarketRegime,
+    MarketRegimeAssessment,
     TechnicalAnalysisResult,
     TechnicalIndicatorSnapshot,
 )
@@ -38,6 +40,15 @@ class _SignalAssessment:
     tags: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _RegimeAssessment:
+    regime: MarketRegime
+    label: str
+    summary: str
+    confirmation_score: float
+    evidence: tuple[str, ...]
+
+
 class TechnicalAnalysisService:
     MA_PERIODS = (5, 10, 20, 60)
     EMA_PERIODS = (12, 26)
@@ -46,6 +57,29 @@ class TechnicalAnalysisService:
     STRONG_VOLUME_RATIO = 1.6
     EXPANSION_VOLUME_RATIO = 1.25
     CONTRACTION_VOLUME_RATIO = 0.75
+    RANGE_DISTANCE_THRESHOLD = 0.01
+    RANGE_CHANGE_THRESHOLD = 0.03
+    RANGE_INTRADAY_THRESHOLD = 0.03
+    RANGE_COMPRESSION_THRESHOLD = 0.015
+    TREND_CHANGE_THRESHOLD = 0.04
+    TREND_DISTANCE_THRESHOLD = 0.01
+    PANIC_DAILY_DROP_THRESHOLD = -0.03
+    PANIC_FIVE_BAR_DROP_THRESHOLD = -0.06
+    PANIC_INTRADAY_THRESHOLD = 0.05
+    REBOUND_DAILY_GAIN_THRESHOLD = 0.01
+    REBOUND_RECENT_DROP_THRESHOLD = -0.03
+    REGIME_LABELS = {
+        MarketRegime.TREND: "趋势",
+        MarketRegime.RANGE: "震荡",
+        MarketRegime.PANIC: "恐慌",
+        MarketRegime.REBOUND: "反弹",
+    }
+    REGIME_PRIORITY = {
+        MarketRegime.PANIC: 4,
+        MarketRegime.REBOUND: 3,
+        MarketRegime.RANGE: 2,
+        MarketRegime.TREND: 1,
+    }
 
     def analyze_bars(self, bars: Sequence[MarketBar]) -> TechnicalAnalysisResult:
         prepared = self._prepare_bars(bars)
@@ -88,24 +122,6 @@ class TechnicalAnalysisService:
         )
 
         breakout_level, breakdown_level = self._breakout_levels(high_values, low_values)
-        indicator_snapshot = TechnicalIndicatorSnapshot(
-            symbol=prepared.symbol,
-            sma_5=sma_5,
-            sma_10=sma_10,
-            sma_20=sma_20,
-            sma_60=sma_60,
-            ema_12=ema_12,
-            ema_26=ema_26,
-            change_1d=change_1d,
-            change_5d=change_5d,
-            change_10d=change_10d,
-            momentum_acceleration_5d=momentum_acceleration_5d,
-            volume_ratio_5d=volume_ratio_5d,
-            volume_ratio_20d=volume_ratio_20d,
-            intraday_range_percent=intraday_range_percent,
-            breakout_level=breakout_level,
-            breakdown_level=breakdown_level,
-        )
 
         trend_assessment = self._assess_trend(
             latest_bar=latest_bar,
@@ -173,28 +189,40 @@ class TechnicalAnalysisService:
             sum(assessment.bearish_score for assessment in assessments) / len(assessments),
             3,
         )
-        confirmation_score = self._build_confirmation_score(
-            sma_5=sma_5,
-            sma_10=sma_10,
-            sma_20=sma_20,
-            sma_60=sma_60,
-            ema_12=ema_12,
-            ema_26=ema_26,
-            volume_ratio_5d=volume_ratio_5d,
-            volume_ratio_20d=volume_ratio_20d,
-            change_10d=change_10d,
-        )
-        market_regime, market_regime_label = self._detect_market_regime(
+        trend_direction = self._resolve_direction(
             bullish_score=bullish_score,
             bearish_score=bearish_score,
-            change_10d=change_10d,
-            change_5d=change_5d,
-            volume_ratio_5d=volume_ratio_5d,
-            sma_5=sma_5,
-            sma_20=sma_20,
-            sma_60=sma_60,
-            intraday_range_percent=intraday_range_percent,
         )
+        market_regime_assessment = self._assess_market_regime(
+            latest_bar=latest_bar,
+            indicator_snapshot=TechnicalIndicatorSnapshot(
+                symbol=prepared.symbol,
+                sma_5=sma_5,
+                sma_10=sma_10,
+                sma_20=sma_20,
+                sma_60=sma_60,
+                ema_12=ema_12,
+                ema_26=ema_26,
+                change_1d=change_1d,
+                change_5d=change_5d,
+                change_10d=change_10d,
+                momentum_acceleration_5d=momentum_acceleration_5d,
+                volume_ratio_5d=volume_ratio_5d,
+                volume_ratio_20d=volume_ratio_20d,
+                intraday_range_percent=intraday_range_percent,
+                breakout_level=breakout_level,
+                breakdown_level=breakdown_level,
+            ),
+            trend_direction=trend_direction,
+            trend_assessment=trend_assessment,
+            moving_average_assessment=moving_average_assessment,
+            momentum_assessment=momentum_assessment,
+            volume_assessment=volume_assessment,
+            pattern_assessment=pattern_assessment,
+        )
+        confirmation_score = market_regime_assessment.confirmation_score
+        market_regime = market_regime_assessment.regime.value
+        market_regime_label = market_regime_assessment.label
         indicator_snapshot = TechnicalIndicatorSnapshot(
             symbol=prepared.symbol,
             sma_5=sma_5,
@@ -216,10 +244,6 @@ class TechnicalAnalysisService:
             market_regime=market_regime,
             market_regime_label=market_regime_label,
         )
-        trend_direction = self._resolve_direction(
-            bullish_score=bullish_score,
-            bearish_score=bearish_score,
-        )
         return TechnicalAnalysisResult(
             symbol=prepared.symbol,
             latest_bar=latest_bar,
@@ -228,6 +252,13 @@ class TechnicalAnalysisService:
             market_regime=market_regime,
             market_regime_label=market_regime_label,
             confirmation_score=confirmation_score,
+            market_regime_assessment=MarketRegimeAssessment(
+                regime=market_regime_assessment.regime,
+                label=market_regime_assessment.label,
+                confirmation_score=confirmation_score,
+                summary=market_regime_assessment.summary,
+                evidence=list(market_regime_assessment.evidence),
+            ),
             indicator_snapshot=indicator_snapshot,
             signals=signals,
             bullish_score=bullish_score,
@@ -235,74 +266,292 @@ class TechnicalAnalysisService:
             warnings=list(prepared.warnings),
         )
 
+    def _assess_market_regime(
+        self,
+        *,
+        latest_bar: MarketBar,
+        indicator_snapshot: TechnicalIndicatorSnapshot,
+        trend_direction: SignalDirection,
+        trend_assessment: _SignalAssessment,
+        moving_average_assessment: _SignalAssessment,
+        momentum_assessment: _SignalAssessment,
+        volume_assessment: _SignalAssessment,
+        pattern_assessment: _SignalAssessment,
+    ) -> _RegimeAssessment:
+        scores = {
+            MarketRegime.TREND: 0.0,
+            MarketRegime.RANGE: 0.0,
+            MarketRegime.PANIC: 0.0,
+            MarketRegime.REBOUND: 0.0,
+        }
+        evidence: dict[MarketRegime, list[str]] = {
+            regime: [] for regime in scores
+        }
+
+        def add(regime: MarketRegime, weight: float, reason: str) -> None:
+            scores[regime] += weight
+            evidence[regime].append(reason)
+
+        change_1d = indicator_snapshot.change_1d
+        change_5d = indicator_snapshot.change_5d
+        change_10d = indicator_snapshot.change_10d
+        strongest_volume_ratio = self._strongest_ratio(
+            indicator_snapshot.volume_ratio_5d,
+            indicator_snapshot.volume_ratio_20d,
+        )
+        price_to_sma20 = self._safe_ratio(
+            latest_bar.close_price - indicator_snapshot.sma_20,
+            indicator_snapshot.sma_20,
+        )
+        price_to_sma60 = self._safe_ratio(
+            latest_bar.close_price - indicator_snapshot.sma_60,
+            indicator_snapshot.sma_60,
+        )
+        moving_average_spread = self._average_spread(
+            (
+                indicator_snapshot.sma_5,
+                indicator_snapshot.sma_10,
+                indicator_snapshot.sma_20,
+            ),
+            latest_bar.close_price,
+        )
+        stack_direction = self._stack_direction(
+            (
+                indicator_snapshot.sma_5,
+                indicator_snapshot.sma_10,
+                indicator_snapshot.sma_20,
+                indicator_snapshot.sma_60,
+            )
+        )
+        directional_hint = self._first_direction(
+            trend_direction,
+            trend_assessment.direction,
+            moving_average_assessment.direction,
+            momentum_assessment.direction,
+        )
+        trend_sign = (
+            1.0 if directional_hint == SignalDirection.BULLISH
+            else -1.0 if directional_hint == SignalDirection.BEARISH
+            else 0.0
+        )
+        pattern_tags = set(pattern_assessment.tags)
+        recent_decline = (
+            change_5d is not None and change_5d <= self.REBOUND_RECENT_DROP_THRESHOLD
+        ) or (change_10d is not None and change_10d <= -0.05)
+        positive_session = latest_bar.close_price > latest_bar.open_price
+        recovered_short_averages = any(
+            average is not None and latest_bar.close_price > average
+            for average in (indicator_snapshot.sma_5, indicator_snapshot.sma_10)
+        )
+
+        if directional_hint in (SignalDirection.BULLISH, SignalDirection.BEARISH):
+            add(
+                MarketRegime.TREND,
+                0.22,
+                f"core technical direction remains {directional_hint.value}",
+            )
+            if stack_direction == directional_hint:
+                add(
+                    MarketRegime.TREND,
+                    0.18,
+                    "moving averages are stacked in the same direction",
+                )
+            if momentum_assessment.direction == directional_hint:
+                add(
+                    MarketRegime.TREND,
+                    0.14,
+                    "momentum confirms the directional bias",
+                )
+            if price_to_sma20 is not None and price_to_sma20 * trend_sign >= self.TREND_DISTANCE_THRESHOLD:
+                add(
+                    MarketRegime.TREND,
+                    0.10,
+                    "price is holding away from the 20-day average in trend direction",
+                )
+            if change_10d is not None and change_10d * trend_sign >= self.TREND_CHANGE_THRESHOLD:
+                add(
+                    MarketRegime.TREND,
+                    0.12,
+                    "10-bar price change shows sustained follow-through",
+                )
+            if strongest_volume_ratio is not None and strongest_volume_ratio >= 1.05:
+                if volume_assessment.direction == directional_hint:
+                    add(
+                        MarketRegime.TREND,
+                        0.08,
+                        "volume participation supports the directional move",
+                    )
+            if pattern_assessment.direction == directional_hint and pattern_tags.intersection(
+                {"breakout", "breakdown"}
+            ):
+                add(
+                    MarketRegime.TREND,
+                    0.10,
+                    "recent price action extended the move beyond a prior trading band",
+                )
+
+        if trend_assessment.direction in (SignalDirection.NEUTRAL, SignalDirection.MIXED):
+            add(MarketRegime.RANGE, 0.18, "trend signal lacks a decisive slope")
+        if moving_average_assessment.direction in (
+            SignalDirection.NEUTRAL,
+            SignalDirection.MIXED,
+        ):
+            add(MarketRegime.RANGE, 0.16, "moving averages are flat or intertwined")
+        if momentum_assessment.direction in (SignalDirection.NEUTRAL, SignalDirection.MIXED):
+            add(MarketRegime.RANGE, 0.12, "momentum is mixed across the observed windows")
+        if price_to_sma20 is not None and abs(price_to_sma20) <= self.RANGE_DISTANCE_THRESHOLD:
+            add(MarketRegime.RANGE, 0.14, "price is holding close to the 20-day average")
+        if moving_average_spread is not None and moving_average_spread <= self.RANGE_COMPRESSION_THRESHOLD:
+            add(MarketRegime.RANGE, 0.10, "short and medium averages are compressed")
+        if change_5d is not None and abs(change_5d) <= self.RANGE_CHANGE_THRESHOLD:
+            add(MarketRegime.RANGE, 0.12, "5-bar change remains contained")
+        if (
+            indicator_snapshot.intraday_range_percent is not None
+            and indicator_snapshot.intraday_range_percent <= self.RANGE_INTRADAY_THRESHOLD
+        ):
+            add(MarketRegime.RANGE, 0.08, "intraday volatility is subdued")
+        if strongest_volume_ratio is not None and 0.85 <= strongest_volume_ratio <= 1.15:
+            add(MarketRegime.RANGE, 0.06, "turnover is close to recent norms")
+
+        if pattern_assessment.direction == SignalDirection.BEARISH and "breakdown" in pattern_tags:
+            add(MarketRegime.PANIC, 0.18, "price broke below a prior support zone")
+        if trend_assessment.direction == SignalDirection.BEARISH:
+            add(MarketRegime.PANIC, 0.18, "trend structure is pointed lower")
+        if momentum_assessment.direction == SignalDirection.BEARISH:
+            add(MarketRegime.PANIC, 0.12, "momentum remains decisively negative")
+        if change_1d is not None and change_1d <= self.PANIC_DAILY_DROP_THRESHOLD:
+            add(MarketRegime.PANIC, 0.16, "latest session registered a sharp downside move")
+        if change_5d is not None and change_5d <= self.PANIC_FIVE_BAR_DROP_THRESHOLD:
+            add(MarketRegime.PANIC, 0.12, "multi-bar drawdown has accelerated lower")
+        if (
+            indicator_snapshot.intraday_range_percent is not None
+            and indicator_snapshot.intraday_range_percent >= self.PANIC_INTRADAY_THRESHOLD
+        ):
+            add(MarketRegime.PANIC, 0.12, "volatility expanded well above a typical session")
+        if strongest_volume_ratio is not None and strongest_volume_ratio >= 1.20:
+            add(MarketRegime.PANIC, 0.10, "volume expanded enough to suggest distribution")
+        if price_to_sma20 is not None and price_to_sma20 <= -0.02:
+            add(MarketRegime.PANIC, 0.08, "price is stretched below the 20-day average")
+        if price_to_sma60 is not None and price_to_sma60 <= -0.03:
+            add(MarketRegime.PANIC, 0.08, "price also sits materially below the 60-day average")
+        if latest_bar.close_price < latest_bar.open_price:
+            add(MarketRegime.PANIC, 0.05, "the latest candle closed weaker than it opened")
+
+        if recent_decline:
+            add(MarketRegime.REBOUND, 0.18, "the market is trying to recover from a recent decline")
+        if change_1d is not None and change_1d >= self.REBOUND_DAILY_GAIN_THRESHOLD:
+            add(MarketRegime.REBOUND, 0.16, "latest session produced a meaningful upside response")
+        if positive_session and recovered_short_averages:
+            add(MarketRegime.REBOUND, 0.10, "price recovered above short-term averages")
+        if pattern_assessment.direction == SignalDirection.BULLISH and "reversal" in pattern_tags:
+            add(MarketRegime.REBOUND, 0.18, "latest candle matches a bullish reversal profile")
+        if (
+            indicator_snapshot.momentum_acceleration_5d is not None
+            and indicator_snapshot.momentum_acceleration_5d >= 0.02
+        ):
+            add(MarketRegime.REBOUND, 0.12, "short-term momentum is improving from a weak base")
+        if strongest_volume_ratio is not None and strongest_volume_ratio >= 1.05 and positive_session:
+            add(MarketRegime.REBOUND, 0.10, "participation improved on the bounce attempt")
+        if trend_direction in (
+            SignalDirection.BEARISH,
+            SignalDirection.MIXED,
+            SignalDirection.NEUTRAL,
+        ) and change_1d is not None and change_1d > 0:
+            add(MarketRegime.REBOUND, 0.08, "the bounce is still developing against a fragile backdrop")
+
+        if max(scores.values()) < 0.18 and scores[MarketRegime.RANGE] < 0.18:
+            add(
+                MarketRegime.RANGE,
+                0.18,
+                "directional evidence is weak, so the regime defaults to a low-conviction range",
+            )
+
+        clamped_scores = {
+            regime: self._clamp_score(score)
+            for regime, score in scores.items()
+        }
+        ranked_regimes = sorted(
+            clamped_scores.items(),
+            key=lambda item: (item[1], self.REGIME_PRIORITY[item[0]]),
+            reverse=True,
+        )
+        dominant_regime, dominant_score = ranked_regimes[0]
+        runner_up_score = ranked_regimes[1][1] if len(ranked_regimes) > 1 else 0.0
+        confirmation_score = self._build_confirmation_score(
+            dominant_score=dominant_score,
+            runner_up_score=runner_up_score,
+        )
+        summary = self._summarize_market_regime(
+            regime=dominant_regime,
+            direction=directional_hint,
+        )
+        regime_evidence = evidence[dominant_regime] or [
+            "available bars do not yet provide a stronger regime signal"
+        ]
+        return _RegimeAssessment(
+            regime=dominant_regime,
+            label=self.REGIME_LABELS[dominant_regime],
+            summary=summary,
+            confirmation_score=confirmation_score,
+            evidence=tuple(regime_evidence),
+        )
+
     def _build_confirmation_score(
         self,
         *,
-        sma_5: float | None,
-        sma_10: float | None,
-        sma_20: float | None,
-        sma_60: float | None,
-        ema_12: float | None,
-        ema_26: float | None,
-        volume_ratio_5d: float | None,
-        volume_ratio_20d: float | None,
-        change_10d: float | None,
+        dominant_score: float,
+        runner_up_score: float,
     ) -> float:
-        score = 0.0
-        total = 0.0
+        return self._clamp_score(dominant_score - (runner_up_score * 0.25))
 
-        def add(condition: bool | None, weight: float) -> None:
-            nonlocal score, total
-            total += weight
-            if condition:
-                score += weight
-
-        add(sma_5 is not None and sma_20 is not None and sma_5 > sma_20, 0.2)
-        add(sma_20 is not None and sma_60 is not None and sma_20 > sma_60, 0.2)
-        add(ema_12 is not None and ema_26 is not None and ema_12 > ema_26, 0.15)
-        add(volume_ratio_5d is not None and volume_ratio_5d >= 1.0, 0.15)
-        add(volume_ratio_20d is not None and volume_ratio_20d >= 1.0, 0.1)
-        add(change_10d is not None and abs(change_10d) >= 0.03, 0.1)
-        add(sma_10 is not None and sma_20 is not None and abs(sma_10 - sma_20) / max(sma_20, 1e-6) < 0.05, 0.1)
-
-        if total == 0:
-            return 0.0
-        return round(score / total, 3)
-
-    def _detect_market_regime(
+    def _summarize_market_regime(
         self,
         *,
-        bullish_score: float,
-        bearish_score: float,
-        change_10d: float | None,
-        change_5d: float | None,
-        volume_ratio_5d: float | None,
-        sma_5: float | None,
-        sma_20: float | None,
-        sma_60: float | None,
-        intraday_range_percent: float | None,
-    ) -> tuple[str, str]:
-        bullish_bias = bullish_score >= bearish_score
-        bearish_bias = bearish_score > bullish_score
-        price_accel = abs(change_10d or 0.0)
-        short_term_change = change_5d or 0.0
-        vol = volume_ratio_5d or 0.0
-        range_pct = intraday_range_percent or 0.0
+        regime: MarketRegime,
+        direction: SignalDirection | None,
+    ) -> str:
+        if regime == MarketRegime.TREND:
+            if direction == SignalDirection.BULLISH:
+                return "Bullish trend regime is supported by aligned structure and follow-through."
+            if direction == SignalDirection.BEARISH:
+                return "Bearish trend regime is active, but selling remains more orderly than panic."
+            return "Directional trend regime is supported by aligned structure and follow-through."
+        if regime == MarketRegime.RANGE:
+            return "Range regime dominates because price is staying near its medium-term mean."
+        if regime == MarketRegime.PANIC:
+            return "Panic regime is active because downside pressure, volatility, and participation expanded together."
+        return "Rebound regime is active because price is bouncing from a recent decline with improving short-term confirmation."
 
-        if bearish_bias and price_accel > 0.05 and vol >= 1.2 and range_pct >= 0.03:
-            return "panic", "恐慌"
-        if bullish_bias and short_term_change > 0 and price_accel > 0.03 and vol >= 1.0:
-            return "trend", "趋势"
-        if bullish_bias and short_term_change > 0 and price_accel <= 0.03 and vol >= 0.9 and sma_5 and sma_20 and sma_5 > sma_20:
-            return "rebound", "反弹"
-        if bearish_bias and short_term_change < 0 and price_accel <= 0.04 and vol <= 1.0:
-            return "range", "震荡"
-        if sma_5 is not None and sma_20 is not None and sma_60 is not None:
-            if sma_5 > sma_20 > sma_60 and bullish_bias:
-                return "trend", "趋势"
-            if sma_5 < sma_20 < sma_60 and bearish_bias:
-                return "panic", "恐慌"
-        return "range", "震荡"
+    def _strongest_ratio(self, *values: float | None) -> float | None:
+        available_values = [value for value in values if value is not None]
+        if not available_values:
+            return None
+        return max(available_values)
+
+    def _average_spread(
+        self,
+        values: Sequence[float | None],
+        reference_value: float,
+    ) -> float | None:
+        if reference_value <= 0:
+            return None
+        available_values = [value for value in values if value is not None]
+        if len(available_values) < 2:
+            return None
+        pairwise_spreads = [
+            abs(left - right)
+            for left, right in zip(available_values, available_values[1:])
+        ]
+        return sum(pairwise_spreads) / len(pairwise_spreads) / reference_value
+
+    def _first_direction(
+        self,
+        *directions: SignalDirection | None,
+    ) -> SignalDirection | None:
+        for direction in directions:
+            if direction in (SignalDirection.BULLISH, SignalDirection.BEARISH):
+                return direction
+        return None
 
     def _prepare_bars(self, bars: Sequence[MarketBar]) -> _PreparedBars:
         if not bars:
