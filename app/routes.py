@@ -87,6 +87,7 @@ def dashboard() -> str:
     watchlist = _build_watchlist_view_models()
     alerts, alert_summary = _build_alert_view_models()
     recent_activity = _build_recent_activity(limit=5)
+    recommendation_events = _build_recommendation_event_history(limit=5)
     recent_scheduled = [item for item in recent_activity if item["status"] == "scheduled"]
     recent_research = [item for item in recent_activity if item["status"] == "research"]
     return render_template(
@@ -97,6 +98,7 @@ def dashboard() -> str:
         alerts=alerts,
         alert_summary=alert_summary,
         recent_activity=recent_activity,
+        recommendation_events=recommendation_events,
         recent_scheduled=recent_scheduled,
         recent_research=recent_research,
         alerts_for_title=alerts,
