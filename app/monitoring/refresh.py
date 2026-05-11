@@ -33,6 +33,7 @@ class WatchlistRefreshService:
     MIN_REFRESH_GAP_SECONDS = 180
     LOW_CONFIDENCE_FLOOR = 0.34
     NO_TRADE_CONFIDENCE_FLOOR = 0.20
+    LOW_LIQUIDITY_TURNOVER_FLOOR = 5_000_000
 
     def __init__(
         self,
@@ -166,6 +167,12 @@ class WatchlistRefreshService:
         elif confidence < self.LOW_CONFIDENCE_FLOOR:
             recommendation = "watch" if recommendation != "sell" else "avoid"
             reason = f"信号质量不足，降级处理：{reason}"
+
+        turnover = snapshot_result.data.turnover or 0.0
+        if turnover < self.LOW_LIQUIDITY_TURNOVER_FLOOR and recommendation in {"buy", "sell"}:
+            recommendation = "watch"
+            reason = f"流动性偏弱，建议保守处理：{reason}"
+            confidence = round(confidence * 0.85, 3)
 
         outcome = RefreshOutcome(
             symbol=row.symbol,
