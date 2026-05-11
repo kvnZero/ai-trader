@@ -189,19 +189,97 @@
         </div>
       </article>
 
+      {% set recommendation_summary = workspace.recommendation.summary or workspace.recommendation.message or "输入标的后，这里会展示最终建议和建议依据。" %}
+      {% set recommendation_action = workspace.recommendation.action|default('', true)|string|lower %}
+      {% set quality_text = (
+        recommendation_summary
+        ~ ' '
+        ~ (workspace.recommendation.message|default('', true))
+        ~ ' '
+        ~ ((workspace.recommendation.risk_notes|default([], true))|join(' '))
+        ~ ' '
+        ~ ((workspace.recommendation.conflicts|default([], true))|join(' '))
+      )|lower %}
+      {% set has_conflicts = workspace.recommendation.conflicts|default([], true)|length > 0 %}
+      {% set has_risk_notes = workspace.recommendation.risk_notes|default([], true)|length > 0 %}
+      {% set is_no_trade_state = recommendation_action == 'watch'
+        or 'no trade' in quality_text
+        or 'no-trade' in quality_text
+        or '不交易' in quality_text
+        or '观望' in quality_text
+        or '等待' in quality_text %}
+      {% set is_low_quality_state = recommendation_action and (
+        'low quality' in quality_text
+        or 'low-quality' in quality_text
+        or 'weak signal' in quality_text
+        or 'low signal' in quality_text
+        or 'low confidence' in quality_text
+        or 'low-confidence' in quality_text
+        or 'noise' in quality_text
+        or 'noisy' in quality_text
+        or 'stale' in quality_text
+        or 'conflict' in quality_text
+        or '信号不足' in quality_text
+        or '信号较弱' in quality_text
+        or '低质量' in quality_text
+        or '低置信' in quality_text
+        or '噪音' in quality_text
+        or '冲突' in quality_text
+        or 'without technical signals' in quality_text
+        or 'without sentiment inputs' in quality_text
+        or 'lacks supporting company mappings' in quality_text
+        or workspace.recommendation.technical_signal_count == 0
+        or (recommendation_action == 'watch' and has_conflicts)
+      ) %}
       <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
         <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Final Recommendation</p>
         <div class="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div class="flex items-center gap-3">
-              <span class="rounded-full {% if workspace.recommendation.action == 'buy' %}bg-emerald-300/15 text-emerald-200{% elif workspace.recommendation.action == 'sell' %}bg-rose-300/15 text-rose-200{% elif workspace.recommendation.action == 'avoid' %}bg-amber-300/15 text-amber-200{% else %}bg-slate-300/10 text-slate-200{% endif %} px-4 py-2 text-sm font-semibold uppercase tracking-[0.18em]">
+              <span class="rounded-full {% if workspace.recommendation.action == 'buy' %}bg-emerald-300/15 text-emerald-200{% elif workspace.recommendation.action == 'sell' %}bg-rose-300/15 text-rose-200{% elif workspace.recommendation.action == 'avoid' or is_no_trade_state or is_low_quality_state %}bg-amber-300/15 text-amber-200{% else %}bg-slate-300/10 text-slate-200{% endif %} px-4 py-2 text-sm font-semibold uppercase tracking-[0.18em]">
                 {{ workspace.recommendation.action_label or "等待研究" }}
               </span>
               {% if workspace.recommendation.confidence %}
                 <span class="text-sm text-slate-300">置信度 {{ workspace.recommendation.confidence }}</span>
               {% endif %}
             </div>
-            <p class="mt-4 text-sm leading-7 text-slate-300">{{ workspace.recommendation.summary or workspace.recommendation.message or "输入标的后，这里会展示最终建议和建议依据。" }}</p>
+            <p class="mt-4 text-sm leading-7 text-slate-300">{{ recommendation_summary }}</p>
+            {% if is_no_trade_state or is_low_quality_state %}
+              <div class="mt-4 rounded-[1.5rem] border border-amber-400/30 bg-amber-300/10 p-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  {% if is_no_trade_state %}
+                    <span class="rounded-full border border-amber-400/30 bg-amber-300/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-amber-200">No-Trade</span>
+                  {% endif %}
+                  {% if is_low_quality_state %}
+                    <span class="rounded-full border border-amber-400/30 bg-amber-300/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-amber-200">Low Quality</span>
+                  {% endif %}
+                </div>
+                <p class="mt-3 text-sm leading-7 text-amber-100">
+                  {% if is_no_trade_state and is_low_quality_state %}
+                    当前更接近“不交易 / 继续观察”状态，现有证据质量或一致性还不足以支撑更明确的执行建议。
+                  {% elif is_no_trade_state %}
+                    当前最终建议偏向继续观察，不宜把这次输出理解为明确的买卖执行信号。
+                  {% else %}
+                    当前输出包含较多噪音、缺口或分歧，建议等待更清晰的技术与舆情确认。
+                  {% endif %}
+                </p>
+                <div class="mt-3 flex flex-wrap gap-2 text-xs text-amber-100/90">
+                  <span class="rounded-full border border-amber-400/20 bg-slate-950/40 px-3 py-1">决策分数 {{ workspace.recommendation.decision_score or "--" }}</span>
+                  {% if has_conflicts %}
+                    <span class="rounded-full border border-amber-400/20 bg-slate-950/40 px-3 py-1">冲突信号 {{ workspace.recommendation.conflicts|length }} 条</span>
+                  {% endif %}
+                  {% if workspace.recommendation.technical_signal_count == 0 %}
+                    <span class="rounded-full border border-amber-400/20 bg-slate-950/40 px-3 py-1">技术信号不足</span>
+                  {% endif %}
+                  {% if workspace.recommendation.sentiment_count == 0 %}
+                    <span class="rounded-full border border-amber-400/20 bg-slate-950/40 px-3 py-1">关联舆情不足</span>
+                  {% endif %}
+                </div>
+                {% if has_risk_notes %}
+                  <p class="mt-3 text-xs leading-6 text-amber-100/80">风险提示：{{ workspace.recommendation.risk_notes[0] }}</p>
+                {% endif %}
+              </div>
+            {% endif %}
           </div>
           <div class="rounded-[1.75rem] border border-slate-800/80 bg-slate-950/60 px-5 py-4">
             <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Decision Score</p>
