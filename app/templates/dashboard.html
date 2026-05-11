@@ -14,7 +14,7 @@
           第一阶段先建立可操作的平台骨架，让总览、研究、舆情、建议和系统能力各自独立承载后续模块。
         </p>
       </div>
-      <div class="grid gap-3 sm:grid-cols-3">
+      <div class="grid gap-3 sm:grid-cols-4">
         <div class="rounded-3xl border border-slate-800/80 bg-slate-900/60 px-4 py-4">
           <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Environment</p>
           <p class="mt-2 text-lg font-semibold text-white">{{ settings.environment }}</p>
@@ -26,6 +26,24 @@
         <div class="rounded-3xl border border-slate-800/80 bg-slate-900/60 px-4 py-4">
           <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Sentiment TTL</p>
           <p class="mt-2 text-lg font-semibold text-white">{{ settings.sentiment_cache_ttl_seconds }}s</p>
+        </div>
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-900/60 px-4 py-4">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Sentiment Health</p>
+          <div class="mt-2 flex items-center justify-between gap-3">
+            <p class="text-lg font-semibold {% if sentiment_source_health.status == 'healthy' %}text-emerald-200{% elif sentiment_source_health.status == 'degraded' %}text-amber-200{% else %}text-rose-200{% endif %}">
+              {{ sentiment_source_health.label }}
+            </p>
+            <span class="rounded-full bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-200">
+              {{ sentiment_source_health.failed_source_count }}/{{ sentiment_source_health.total_source_count }}
+            </span>
+          </div>
+          <p class="mt-2 text-xs leading-5 text-slate-400">
+            {% if sentiment_source_health.reason_summary %}
+              {{ sentiment_source_health.reason_summary[:2] | join(' · ') }}
+            {% else %}
+              全部来源运行正常。
+            {% endif %}
+          </p>
         </div>
       </div>
     </header>

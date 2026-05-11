@@ -96,6 +96,38 @@ def _build_sentiment_sources(symbols: list[str] | None = None):
     ]
 
 
+def _build_sentiment_source_health_summary() -> dict[str, object]:
+    sources = _build_sentiment_sources()
+    try:
+        ingestion_result = build_default_sentiment_service().ingest(sources)
+    except Exception as exc:
+        return {
+            "status": "unavailable",
+            "label": "不可用",
+            "message": f"舆情来源健康检查暂时不可用：{exc}",
+            "failed_source_count": 0,
+            "total_source_count": len(sources),
+            "reason_summary": [],
+            "failures": [],
+        }
+
+    source_runs = [
+        {
+            "source": run.source_metadata.source_name,
+            "category": run.source_metadata.category.value,
+            "fetched": run.fetched_count,
+            "emitted": run.emitted_count,
+            "duplicate": run.duplicate_count,
+            "stale": run.stale_count,
+        }
+        for run in ingestion_result.source_runs
+    ]
+    return _build_sentiment_failure_summary(
+        ingestion_result=ingestion_result,
+        source_runs=source_runs,
+    )
+
+
 def _normalize_sentiment_symbols(symbols: list[str] | None, *, limit: int | None = 8) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -127,6 +159,7 @@ def dashboard() -> str:
     recent_activity = _build_recent_activity(limit=5)
     recommendation_events = _build_recommendation_event_history(limit=5)
     event_watch = _build_market_event_watch()
+    sentiment_source_health = _build_sentiment_source_health_summary()
     recent_scheduled = [item for item in recent_activity if item["status"] == "scheduled"]
     recent_research = [item for item in recent_activity if item["status"] == "research"]
     return render_template(
@@ -139,6 +172,7 @@ def dashboard() -> str:
         recent_activity=recent_activity,
         recommendation_events=recommendation_events,
         event_watch=event_watch,
+        sentiment_source_health=sentiment_source_health,
         recent_scheduled=recent_scheduled,
         recent_research=recent_research,
         alerts_for_title=alerts,
