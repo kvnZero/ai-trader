@@ -138,6 +138,21 @@
 
         <div class="mt-4 space-y-3">
           {% for item in watchlist %}
+            {% set recommendation_text = item.recommendation|default('', true)|string|lower %}
+            {% set quality_text = ((item.reason|default('', true)) ~ ' ' ~ (item.status_reason|default('', true)))|lower %}
+            {% set is_low_quality = 'avoid' in recommendation_text
+              or 'no trade' in recommendation_text
+              or 'no-trade' in recommendation_text
+              or 'low quality' in quality_text
+              or 'low-quality' in quality_text
+              or 'low signal' in quality_text
+              or 'weak signal' in quality_text
+              or 'no trade' in quality_text
+              or 'no-trade' in quality_text
+              or '观望' in quality_text
+              or '信号不足' in quality_text
+              or '信号较弱' in quality_text
+              or '噪音' in quality_text %}
             <article class="rounded-3xl border px-4 py-4 {% if item.unread %}border-amber-400/30 bg-amber-300/5{% else %}border-slate-800/80 bg-slate-950/55{% endif %}">
               <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -155,9 +170,27 @@
                   <p class="mt-2 text-lg font-semibold {% if item.status == 'active' %}text-emerald-200{% elif item.status == 'paused' %}text-amber-200{% else %}text-slate-200{% endif %}">
                     {{ item.status_label }}
                   </p>
+                  {% if is_low_quality %}
+                    <div class="mt-3 rounded-2xl border border-amber-400/30 bg-amber-300/10 px-3 py-3">
+                      <p class="text-xs font-medium uppercase tracking-[0.18em] text-amber-200">Low Signal Quality</p>
+                      <p class="mt-2 text-sm leading-6 text-amber-100">当前建议更接近观望或不交易，优先等待更清晰的信号确认。</p>
+                    </div>
+                  {% endif %}
                   <div class="mt-3 space-y-2 text-sm text-slate-300">
-                    <p>建议：<span class="font-medium text-white">{{ item.recommendation | upper }}</span></p>
-                    <p>置信度：<span class="font-medium text-white">{{ "%.0f"|format(item.confidence * 100) }}%</span></p>
+                    <p>
+                      建议：
+                      <span class="font-medium {% if is_low_quality %}text-amber-100{% else %}text-white{% endif %}">{{ item.recommendation | upper }}</span>
+                      {% if is_low_quality %}
+                        <span class="ml-2 rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-amber-200">No-Trade Bias</span>
+                      {% endif %}
+                    </p>
+                    <p>
+                      置信度：
+                      <span class="font-medium {% if is_low_quality %}text-amber-100{% else %}text-white{% endif %}">{{ "%.0f"|format(item.confidence * 100) }}%</span>
+                      {% if is_low_quality %}
+                        <span class="ml-2 text-xs text-amber-200/80">低质量信号下仅供参考</span>
+                      {% endif %}
+                    </p>
                     <p>最近分析：<span class="font-medium text-white">{{ item.last_analysis_at }}</span></p>
                   </div>
                   <p class="mt-3 text-xs leading-6 text-slate-400">{{ item.context_label }}</p>
