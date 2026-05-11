@@ -281,8 +281,8 @@ class WatchlistRepository:
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (symbol, status, int(stale), detail, datetime.utcnow().isoformat(timespec="minutes")),
-        )
-        conn.commit()
+            )
+            conn.commit()
         return cursor.rowcount > 0
 
     def record_research_note(self, symbol: str, detail: str) -> bool:
