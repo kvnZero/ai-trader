@@ -161,8 +161,10 @@ def research_add_watchlist_stock() -> str:
 
 @bp.get("/sentiment")
 def sentiment() -> str:
+    workspace = _build_sentiment_workspace()
     return render_template(
         "sentiment.html",
+        workspace=workspace,
         navigation=_WEB_NAVIGATION,
         active_nav="core.sentiment",
     )
@@ -425,6 +427,98 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "recent_recommendation_events": recommendation_events,
         "recent_activity": recent_activity,
         "alerts": alerts,
+    }
+
+
+def _build_sentiment_workspace() -> dict[str, object]:
+    ingestion_result = build_default_sentiment_service().ingest()
+    entity_mapping_service = build_default_entity_mapping_service()
+    company_lookup = {
+        entry.company.symbol: entry.company
+        for entry in entity_mapping_service.company_dictionary.entries
+    }
+
+    items = ingestion_result.items
+    mapped_items: list[dict[str, object]] = []
+    company_counter: dict[str, int] = {}
+    tag_counter: dict[str, int] = {}
+    positive_count = 0
+    negative_count = 0
+    neutral_count = 0
+
+    for item in items:
+        score = item.sentiment_score or 0.0
+        if score >= 0.15:
+            positive_count += 1
+        elif score <= -0.15:
+            negative_count += 1
+        else:
+            neutral_count += 1
+
+        matches = entity_mapping_service.map_sentiment_item(item, min_confidence=0.18, max_matches=3)
+        for match in matches:
+            company_counter[match.company.symbol] = company_counter.get(match.company.symbol, 0) + 1
+
+        for tag in item.tags:
+            tag_counter[tag] = tag_counter.get(tag, 0) + 1
+
+        mapped_items.append(
+            {
+                "title": item.title,
+                "source": item.source,
+                "published_at": item.published_at.strftime("%m-%d %H:%M"),
+                "score": f"{score:+.2f}",
+                "summary": item.content[:120],
+                "tags": list(item.tags[:3]),
+                "matches": [
+                    {
+                        "symbol": match.company.symbol,
+                        "name": match.company.company_name,
+                        "confidence": f"{match.confidence:.0%}",
+                    }
+                    for match in matches[:2]
+                ],
+            }
+        )
+
+    top_companies = sorted(
+        (
+            {
+                "symbol": symbol,
+                "name": company_lookup[symbol].company_name if symbol in company_lookup else symbol,
+                "count": count,
+            }
+            for symbol, count in company_counter.items()
+        ),
+        key=lambda item: (-item["count"], item["symbol"]),
+    )[:4]
+    top_tags = sorted(tag_counter.items(), key=lambda item: (-item[1], item[0]))[:6]
+    source_runs = [
+        {
+            "source": run.source_metadata.source_name,
+            "category": run.source_metadata.category.value,
+            "fetched": run.fetched_count,
+            "emitted": run.emitted_count,
+            "duplicate": run.duplicate_count,
+            "stale": run.stale_count,
+        }
+        for run in ingestion_result.source_runs
+    ]
+
+    return {
+        "total_items": len(items),
+        "source_count": len(source_runs),
+        "positive_count": positive_count,
+        "negative_count": negative_count,
+        "neutral_count": neutral_count,
+        "duplicate_count": len(ingestion_result.duplicate_records),
+        "stale_count": len(ingestion_result.stale_records),
+        "latest_published_at": max((item.published_at for item in items), default=None),
+        "recent_items": mapped_items[:8],
+        "top_companies": top_companies,
+        "top_tags": top_tags,
+        "source_runs": source_runs,
+        "source_names": [run["source"] for run in source_runs],
     }
 
 
