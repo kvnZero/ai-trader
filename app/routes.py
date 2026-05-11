@@ -24,7 +24,7 @@ from app.modules.technical_analysis import (
 )
 from app.modules.technical_analysis.contracts import TechnicalAnalysisResult
 from app.modules.trader_agent import build_default_trader_agent_service
-from app.persistence import AlertRepository, AlertRow, WatchlistRepository
+from app.persistence import AlertRepository, AlertRow, RecommendationEventRepository, WatchlistRepository
 
 bp = Blueprint("core", __name__)
 
@@ -65,6 +65,10 @@ def _watchlist_repository() -> WatchlistRepository:
 
 def _alert_repository() -> AlertRepository:
     return current_app.config["TRADER_ALERT_REPOSITORY"]
+
+
+def _recommendation_event_repository() -> RecommendationEventRepository:
+    return current_app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"]
 
 
 def _monitoring_scheduler():
@@ -178,6 +182,10 @@ def system_capabilities() -> str:
     selected_symbol = request.args.get("symbol", "").strip()
     selected_limit = _get_positive_int_arg("limit", default=8)
     recent_runs = _build_recent_activity(selected_symbol or None, limit=selected_limit)
+    recommendation_events = _build_recommendation_event_history(
+        selected_symbol or None,
+        limit=selected_limit,
+    )
     monitoring_status = _monitoring_scheduler().status_snapshot()
     grouped_activity = _group_activity_by_kind(recent_runs)
     activity_summary = _build_activity_summary(recent_runs)
@@ -187,6 +195,7 @@ def system_capabilities() -> str:
         capabilities=capabilities,
         settings=settings,
         recent_runs=recent_runs,
+        recommendation_events=recommendation_events,
         grouped_activity=grouped_activity,
         activity_summary=activity_summary,
         monitoring_status=monitoring_status,
@@ -369,6 +378,25 @@ def _build_recent_activity(symbol: str | None = None, *, limit: int = 8) -> list
             "stale": item["stale"],
         }
         for item in recent_runs
+    ]
+
+
+def _build_recommendation_event_history(
+    symbol: str | None = None,
+    *,
+    limit: int = 8,
+) -> list[dict[str, object]]:
+    rows = _recommendation_event_repository().list_recent(limit=limit, symbol=symbol)
+    return [
+        {
+            "symbol": row.symbol,
+            "previous_action": row.previous_action,
+            "current_action": row.current_action,
+            "confidence": f"{row.confidence:.0%}",
+            "summary": row.summary,
+            "created_at": row.created_at,
+        }
+        for row in rows
     ]
 
 
