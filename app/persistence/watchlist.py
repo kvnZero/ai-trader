@@ -173,3 +173,44 @@ class WatchlistRepository:
             )
             conn.commit()
         return cursor.rowcount > 0
+
+    def record_refresh(
+        self,
+        symbol: str,
+        *,
+        latest_recommendation: str,
+        latest_confidence: float,
+        latest_reason: str,
+        status: str,
+        status_label: str,
+        last_analysis_at: str | None,
+    ) -> bool:
+        symbol = symbol.strip()
+        if not symbol:
+            return False
+
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE watchlist_stocks
+                SET latest_recommendation = ?,
+                    latest_confidence = ?,
+                    latest_reason = ?,
+                    status = ?,
+                    status_label = ?,
+                    last_analysis_at = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE symbol = ?
+                """,
+                (
+                    latest_recommendation,
+                    latest_confidence,
+                    latest_reason,
+                    status,
+                    status_label,
+                    last_analysis_at,
+                    symbol,
+                ),
+            )
+            conn.commit()
+        return cursor.rowcount > 0

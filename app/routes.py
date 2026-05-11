@@ -106,6 +106,12 @@ def delete_watchlist_stock(symbol: str) -> str:
     return redirect(url_for("core.dashboard"))
 
 
+@bp.post("/watchlist/<symbol>/refresh")
+def refresh_watchlist_stock(symbol: str) -> str:
+    _refresh_watchlist_item(symbol)
+    return redirect(url_for("core.dashboard"))
+
+
 @bp.get("/research")
 def research() -> str:
     query = request.args.get("query", "").strip()
@@ -286,6 +292,59 @@ def _build_alert_view_models() -> list[dict[str, object]]:
         }
         for row in rows
     ]
+
+
+def _refresh_watchlist_item(symbol: str) -> bool:
+    target = _resolve_research_target(symbol)
+    resolved_symbol = target["symbol"]
+    if resolved_symbol is None:
+        return False
+
+    market_service = build_default_market_data_service()
+    snapshot_result = market_service.get_latest_snapshot(str(resolved_symbol))
+    market_state = "active" if snapshot_result.data is not None else "paused"
+    market_label = "监控中" if snapshot_result.data is not None else "等待开市"
+
+    if snapshot_result.data is None:
+        recommendation = "watch"
+        confidence = 0.0
+        reason = "实时行情暂时不可用，保留最近一次建议。"
+    else:
+        bars_result = market_service.get_daily_bars(
+            str(resolved_symbol),
+            start_date=date.today() - timedelta(days=180),
+            end_date=date.today(),
+            limit=90,
+        )
+        technical_result = None
+        if bars_result.data:
+            try:
+                technical_result = build_default_technical_analysis_service().analyze_bars(bars_result.data)
+            except TechnicalAnalysisValidationError:
+                technical_result = None
+
+        if technical_result is None:
+            recommendation = "watch"
+            confidence = 0.35
+            reason = "技术分析不可用，建议继续观察。"
+        else:
+            recommendation = "buy" if technical_result.bullish_score >= technical_result.bearish_score else "watch"
+            confidence = max(technical_result.bullish_score, technical_result.bearish_score)
+            reason = (
+                technical_result.signals[0].summary
+                if technical_result.signals
+                else "基于当前技术结构的默认刷新结果。"
+            )
+
+    return _watchlist_repository().record_refresh(
+        str(resolved_symbol),
+        latest_recommendation=recommendation,
+        latest_confidence=confidence,
+        latest_reason=reason,
+        status=market_state,
+        status_label=market_label,
+        last_analysis_at=datetime.now(ZoneInfo(_settings().market_timezone)).strftime("%H:%M"),
+    )
 
 
 def _build_monitoring_context() -> dict[str, object]:
