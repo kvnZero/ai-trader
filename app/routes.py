@@ -84,6 +84,7 @@ def dashboard() -> str:
     alerts, alert_summary = _build_alert_view_models()
     recent_activity = _build_recent_activity(limit=5)
     recent_scheduled = [item for item in recent_activity if item["status"] == "scheduled"]
+    recent_research = [item for item in recent_activity if item["status"] == "research"]
     return render_template(
         "dashboard.html",
         capabilities=capabilities,
@@ -93,6 +94,7 @@ def dashboard() -> str:
         alert_summary=alert_summary,
         recent_activity=recent_activity,
         recent_scheduled=recent_scheduled,
+        recent_research=recent_research,
         alerts_for_title=alerts,
         navigation=_WEB_NAVIGATION,
         active_nav="core.dashboard",
