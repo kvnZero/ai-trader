@@ -26,6 +26,8 @@ class RefreshOutcome:
 
 
 class WatchlistRefreshService:
+    MIN_REFRESH_GAP_SECONDS = 180
+
     def __init__(
         self,
         *,
@@ -38,13 +40,35 @@ class WatchlistRefreshService:
         self.alert_repository = alert_repository
         self.market_service = build_default_market_data_service()
         self.technical_service = build_default_technical_analysis_service()
+        self._last_refresh_at: dict[str, datetime] = {}
 
     def refresh_symbol(self, symbol: str, *, source: str) -> RefreshOutcome | None:
         target_row = self.watchlist_repository.get_row(symbol)
         if target_row is None:
             return None
 
-        return self._refresh_row(target_row, source=source)
+        now = datetime.now(ZoneInfo(self.settings.market_timezone))
+        last_refresh_at = self._last_refresh_at.get(target_row.symbol)
+        if (
+            last_refresh_at is not None
+            and (now - last_refresh_at).total_seconds() < self.MIN_REFRESH_GAP_SECONDS
+        ):
+            return RefreshOutcome(
+                symbol=target_row.symbol,
+                changed=False,
+                recommendation=target_row.latest_recommendation,
+                confidence=target_row.latest_confidence,
+                reason="刷新间隔过短，已跳过重复分析。",
+                status=target_row.status,
+                status_label=target_row.status_label,
+                analysis_at=self._now_label(),
+                alert_created=False,
+                source=source,
+            )
+
+        outcome = self._refresh_row(target_row, source=source)
+        self._last_refresh_at[target_row.symbol] = now
+        return outcome
 
     def refresh_enabled(self, *, source: str) -> list[RefreshOutcome]:
         outcomes: list[RefreshOutcome] = []
