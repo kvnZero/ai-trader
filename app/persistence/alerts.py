@@ -99,3 +99,15 @@ class AlertRepository:
             )
             conn.commit()
         return cursor.rowcount
+
+    def create_alert(self, *, symbol: str, title: str, summary: str, level: str = "medium") -> bool:
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO alerts (symbol, title, summary, level, unread)
+                VALUES (?, ?, ?, ?, 1)
+                """,
+                (symbol, title, summary, level),
+            )
+            conn.commit()
+        return cursor.rowcount > 0

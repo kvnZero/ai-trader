@@ -6,7 +6,7 @@ from datetime import datetime, time as dtime
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
-from app.persistence.watchlist import WatchlistRepository
+from app.monitoring.refresh import WatchlistRefreshService
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,11 +21,11 @@ class MarketHoursMonitoringScheduler:
         self,
         *,
         settings: Settings,
-        watchlist_repository: WatchlistRepository,
+        refresh_service: WatchlistRefreshService,
         interval_seconds: int = 300,
     ):
         self.settings = settings
-        self.watchlist_repository = watchlist_repository
+        self.refresh_service = refresh_service
         self.interval_seconds = interval_seconds
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -46,15 +46,8 @@ class MarketHoursMonitoringScheduler:
         market_open = self._is_market_open(now)
         processed_symbols: list[str] = []
         if market_open:
-            for symbol in self.watchlist_repository.list_enabled_symbols():
-                detail = f"auto-refresh at {now.strftime('%Y-%m-%d %H:%M')}"
-                self.watchlist_repository.record_analysis_run(
-                    symbol,
-                    status="scheduled",
-                    stale=False,
-                    detail=detail,
-                )
-                processed_symbols.append(symbol)
+            outcomes = self.refresh_service.refresh_enabled(source="scheduled")
+            processed_symbols = [outcome.symbol for outcome in outcomes]
         return MonitoringTickResult(
             processed_symbols=processed_symbols,
             market_open=market_open,

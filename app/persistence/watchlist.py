@@ -117,6 +117,40 @@ class WatchlistRepository:
             for row in rows
         ]
 
+    def get_row(self, symbol: str) -> WatchlistRow | None:
+        symbol = symbol.strip()
+        if not symbol:
+            return None
+
+        with self.database.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT symbol, name, monitoring_enabled, use_default_schedule, schedule_label,
+                       status, status_label, latest_recommendation, latest_confidence,
+                       latest_reason, last_analysis_at
+                FROM watchlist_stocks
+                WHERE symbol = ?
+                LIMIT 1
+                """,
+                (symbol,),
+            ).fetchone()
+        if row is None:
+            return None
+
+        return WatchlistRow(
+            symbol=row["symbol"],
+            name=row["name"],
+            monitoring_enabled=bool(row["monitoring_enabled"]),
+            use_default_schedule=bool(row["use_default_schedule"]),
+            schedule_label=row["schedule_label"],
+            status=row["status"],
+            status_label=row["status_label"],
+            latest_recommendation=row["latest_recommendation"],
+            latest_confidence=float(row["latest_confidence"]),
+            latest_reason=row["latest_reason"],
+            last_analysis_at=row["last_analysis_at"],
+        )
+
     def create_stock(self, symbol: str, name: str) -> bool:
         symbol = symbol.strip()
         name = name.strip()
