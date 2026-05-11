@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from app.persistence.db import Database
 
@@ -211,6 +212,41 @@ class WatchlistRepository:
                     last_analysis_at,
                     symbol,
                 ),
+            )
+            conn.commit()
+        return cursor.rowcount > 0
+
+    def list_enabled_symbols(self) -> list[str]:
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT symbol
+                FROM watchlist_stocks
+                WHERE monitoring_enabled = 1
+                ORDER BY symbol ASC
+                """
+            ).fetchall()
+        return [row["symbol"] for row in rows]
+
+    def record_analysis_run(
+        self,
+        symbol: str,
+        *,
+        status: str,
+        stale: bool,
+        detail: str,
+    ) -> bool:
+        symbol = symbol.strip()
+        if not symbol:
+            return False
+
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO analysis_runs (symbol, status, stale, detail, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (symbol, status, int(stale), detail, datetime.utcnow().isoformat(timespec="minutes")),
             )
             conn.commit()
         return cursor.rowcount > 0
