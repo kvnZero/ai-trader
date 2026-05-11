@@ -163,7 +163,7 @@ def recommendations() -> str:
 def system_capabilities() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
-    recent_runs = _watchlist_repository().list_recent_analysis_runs()
+    recent_runs = _build_recent_activity()
     monitoring_status = _monitoring_scheduler().status_snapshot()
     return render_template(
         "system.html",
@@ -311,6 +311,20 @@ def _build_alert_view_models() -> list[dict[str, object]]:
             "level": row.level,
         }
         for row in rows
+    ]
+
+
+def _build_recent_activity() -> list[dict[str, object]]:
+    recent_runs = _watchlist_repository().list_recent_analysis_runs()
+    return [
+        {
+            "symbol": item["symbol"],
+            "detail": item["detail"],
+            "status": item["status"],
+            "created_at": item["created_at"],
+            "stale": item["stale"],
+        }
+        for item in recent_runs
     ]
 
 
