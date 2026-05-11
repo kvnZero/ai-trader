@@ -14,8 +14,10 @@ from app.modules.sentiment_ingestion.contracts import (
     IngestedSentimentRecord,
     RawSentimentPayload,
     SentimentIngestionResult,
+    SentimentIngestionError,
     SentimentSourceConfigurationError,
     SentimentSourceDefinition,
+    SentimentSourceFailure,
     SentimentSourceRun,
     SuppressedSentimentRecord,
     SuppressionReason,
@@ -56,55 +58,67 @@ class SentimentIngestionService:
         duplicate_records: list[SuppressedSentimentRecord] = []
         stale_records: list[SuppressedSentimentRecord] = []
         source_runs: list[SentimentSourceRun] = []
+        source_failures: list[SentimentSourceFailure] = []
 
         for source in active_sources:
-            adapter = self._registry.resolve(source.adapter_name)
-            raw_items = adapter.collect(source, now=effective_now)
             emitted_count = 0
             duplicate_count = 0
             stale_count = 0
+            fetched_count = 0
             effective_max_age = source.max_item_age or max_item_age or self._default_max_item_age
+            try:
+                adapter = self._registry.resolve(source.adapter_name)
+                raw_items = adapter.collect(source, now=effective_now)
+                fetched_count = len(raw_items)
 
-            for raw_item in raw_items:
-                record = self._normalize_item(
-                    source=source,
-                    raw_item=raw_item,
-                    collected_at=effective_now,
+                for raw_item in raw_items:
+                    record = self._normalize_item(
+                        source=source,
+                        raw_item=raw_item,
+                        collected_at=effective_now,
+                    )
+                    if self._is_stale(
+                        published_at=record.item.published_at,
+                        now=effective_now,
+                        max_item_age=effective_max_age,
+                    ):
+                        stale_records.append(
+                            self._build_suppressed_record(
+                                record=record,
+                                reason=SuppressionReason.STALE,
+                            )
+                        )
+                        stale_count += 1
+                        continue
+
+                    if record.dedup_key in dedup_keys:
+                        duplicate_records.append(
+                            self._build_suppressed_record(
+                                record=record,
+                                reason=SuppressionReason.DUPLICATE,
+                            )
+                        )
+                        duplicate_count += 1
+                        continue
+
+                    dedup_keys.add(record.dedup_key)
+                    records.append(record)
+                    emitted_count += 1
+            except Exception as exc:
+                source_failures.append(
+                    self._build_source_failure(
+                        source=source,
+                        failed_at=effective_now,
+                        error=exc,
+                    )
                 )
-                if self._is_stale(
-                    published_at=record.item.published_at,
-                    now=effective_now,
-                    max_item_age=effective_max_age,
-                ):
-                    stale_records.append(
-                        self._build_suppressed_record(
-                            record=record,
-                            reason=SuppressionReason.STALE,
-                        )
-                    )
-                    stale_count += 1
-                    continue
-
-                if record.dedup_key in dedup_keys:
-                    duplicate_records.append(
-                        self._build_suppressed_record(
-                            record=record,
-                            reason=SuppressionReason.DUPLICATE,
-                        )
-                    )
-                    duplicate_count += 1
-                    continue
-
-                dedup_keys.add(record.dedup_key)
-                records.append(record)
-                emitted_count += 1
 
             source_runs.append(
                 SentimentSourceRun(
                     source_metadata=source.metadata,
                     adapter_name=source.adapter_name,
                     executed_at=effective_now,
-                    fetched_count=len(raw_items),
+                    fetched_count=fetched_count,
                     emitted_count=emitted_count,
                     duplicate_count=duplicate_count,
                     stale_count=stale_count,
@@ -120,9 +134,11 @@ class SentimentIngestionService:
         duplicate_records.sort(key=lambda record: record.published_at, reverse=True)
         stale_records.sort(key=lambda record: record.published_at, reverse=True)
         source_runs.sort(key=lambda run: run.source_metadata.source_id)
+        source_failures.sort(key=lambda failure: failure.source_metadata.source_id)
         return SentimentIngestionResult(
             records=records,
             source_runs=source_runs,
+            source_failures=source_failures,
             duplicate_records=duplicate_records,
             stale_records=stale_records,
         )
@@ -191,6 +207,32 @@ class SentimentIngestionService:
             reason=reason,
             age_seconds=record.age_seconds,
             source_item_id=record.source_item_id,
+        )
+
+    def _build_source_failure(
+        self,
+        *,
+        source: SentimentSourceDefinition,
+        failed_at: datetime,
+        error: Exception,
+    ) -> SentimentSourceFailure:
+        if isinstance(error, SentimentIngestionError):
+            error_code = error.code
+            retryable = error.retryable
+            details = dict(error.details)
+        else:
+            error_code = "sentiment_source_ingestion_failed"
+            retryable = False
+            details = {"exception_type": type(error).__name__}
+
+        return SentimentSourceFailure(
+            source_metadata=source.metadata,
+            adapter_name=source.adapter_name,
+            failed_at=failed_at,
+            error_code=error_code,
+            error_message=str(error),
+            retryable=retryable,
+            details=details,
         )
 
     def _normalize_text(self, value: str, *, field_name: str) -> str:

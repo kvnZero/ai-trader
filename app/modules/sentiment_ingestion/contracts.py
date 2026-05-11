@@ -172,9 +172,21 @@ class SentimentSourceRun:
 
 
 @dataclass(frozen=True, slots=True)
+class SentimentSourceFailure:
+    source_metadata: SentimentSourceMetadata
+    adapter_name: str
+    failed_at: datetime
+    error_code: str
+    error_message: str
+    retryable: bool
+    details: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class SentimentIngestionResult:
     records: list[IngestedSentimentRecord] = field(default_factory=list)
     source_runs: list[SentimentSourceRun] = field(default_factory=list)
+    source_failures: list[SentimentSourceFailure] = field(default_factory=list)
     duplicate_records: list[SuppressedSentimentRecord] = field(default_factory=list)
     stale_records: list[SuppressedSentimentRecord] = field(default_factory=list)
 
