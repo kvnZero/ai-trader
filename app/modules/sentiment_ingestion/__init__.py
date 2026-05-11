@@ -3,6 +3,7 @@
 from app.modules.sentiment_ingestion.adapters import (
     AKShareLiveNewsSourceAdapter,
     AkshareStockNewsAdapter,
+    RssFeedSentimentSourceAdapter,
     SampleSentimentSourceAdapter,
     SentimentSourceAdapter,
     SentimentSourceRegistry,
@@ -38,6 +39,7 @@ __all__ = [
     "AKShareLiveNewsSourceAdapter",
     "AkshareStockNewsAdapter",
     "RawSentimentPayload",
+    "RssFeedSentimentSourceAdapter",
     "SampleSentimentSourceAdapter",
     "SentimentIngestionError",
     "SentimentIngestionResult",
