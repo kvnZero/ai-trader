@@ -97,6 +97,23 @@
           监控期间系统会持续刷新行情与建议；闭市后自动暂停，除非用户手动覆盖。
         </div>
 
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">当前状态</p>
+            <p class="mt-2 text-sm font-semibold {% if watchlist and watchlist[0].monitoring_now %}text-emerald-200{% else %}text-amber-200{% endif %}">
+              {% if watchlist and watchlist[0].monitoring_now %}交易时段监控激活{% else %}非交易时段自动暂停{% endif %}
+            </p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">当前时刻</p>
+            <p class="mt-2 text-sm font-semibold text-white">{{ watchlist[0].status_reason.split('(')[-1].rstrip(')') if watchlist and watchlist[0].monitoring_now and '(' in watchlist[0].status_reason else "--" }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">自动规则</p>
+            <p class="mt-2 text-sm font-semibold text-white">开市运行，闭市暂停</p>
+          </div>
+        </div>
+
         <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
           <div class="flex items-center justify-between gap-4">
             <div>
@@ -143,6 +160,7 @@
                     <p>置信度：<span class="font-medium text-white">{{ "%.0f"|format(item.confidence * 100) }}%</span></p>
                     <p>最近分析：<span class="font-medium text-white">{{ item.last_analysis_at }}</span></p>
                   </div>
+                  <p class="mt-3 text-xs leading-6 text-slate-400">{{ item.status_reason }}</p>
                   <div class="mt-4 space-y-2">
                     <form action="{{ url_for('core.toggle_watchlist_stock', symbol=item.symbol) }}" method="post">
                       <button type="submit" class="w-full rounded-2xl border px-4 py-2 text-sm font-medium transition {% if item.monitoring_enabled %}border-amber-400/30 bg-amber-300/10 text-amber-100 hover:border-amber-300/60 hover:bg-amber-300/15{% else %}border-emerald-400/30 bg-emerald-300/10 text-emerald-100 hover:border-emerald-300/60 hover:bg-emerald-300/15{% endif %}">

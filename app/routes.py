@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from statistics import mean
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
 
@@ -248,6 +249,7 @@ def _status_from_market_result(result: MarketDataResult[object]) -> int:
 
 
 def _build_watchlist_view_models() -> list[dict[str, object]]:
+    monitoring_context = _build_monitoring_context()
     unread_symbols = {alert.symbol for alert in _alert_repository().list_unread()}
     rows = _watchlist_repository().list_rows()
     return [
@@ -256,13 +258,15 @@ def _build_watchlist_view_models() -> list[dict[str, object]]:
             "name": row.name,
             "monitoring_enabled": row.monitoring_enabled,
             "market_window": row.schedule_label,
-            "status": row.status,
-            "status_label": row.status_label,
+            "status": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["status"],
+            "status_label": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["status_label"],
+            "status_reason": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["reason"],
             "last_analysis_at": row.last_analysis_at or "--",
             "recommendation": row.latest_recommendation,
             "confidence": row.latest_confidence,
             "reason": row.latest_reason,
             "unread": row.symbol in unread_symbols,
+            "monitoring_now": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["monitoring_now"],
         }
         for row in rows
     ]
@@ -281,6 +285,67 @@ def _build_alert_view_models() -> list[dict[str, object]]:
         }
         for row in rows
     ]
+
+
+def _build_monitoring_context() -> dict[str, object]:
+    settings = _settings()
+    timezone = ZoneInfo(settings.market_timezone)
+    now = datetime.now(timezone)
+    am_start = _parse_market_time(settings.market_open_am_start)
+    am_end = _parse_market_time(settings.market_open_am_end)
+    pm_start = _parse_market_time(settings.market_open_pm_start)
+    pm_end = _parse_market_time(settings.market_open_pm_end)
+    current_time = now.time()
+    is_weekday = now.weekday() < 5
+    within_am = am_start <= current_time <= am_end
+    within_pm = pm_start <= current_time <= pm_end
+    market_open = is_weekday and (within_am or within_pm)
+    return {
+        "market_open": market_open,
+        "now_label": now.strftime("%Y-%m-%d %H:%M"),
+        "session_label": (
+            f"{settings.market_open_am_start}-{settings.market_open_am_end} / "
+            f"{settings.market_open_pm_start}-{settings.market_open_pm_end}"
+        ),
+        "is_weekday": is_weekday,
+    }
+
+
+def _resolve_watchlist_status(*, row: object, monitoring_context: dict[str, object]) -> dict[str, object]:
+    if not row.monitoring_enabled:
+        return {
+            "status": "disabled",
+            "status_label": "未开启",
+            "reason": "该标的当前未启用持续监控。",
+            "monitoring_now": False,
+        }
+
+    if monitoring_context["market_open"]:
+        return {
+            "status": "active",
+            "status_label": "监控中",
+            "reason": f"当前处于A股交易时段，系统应持续刷新建议。({monitoring_context['now_label']})",
+            "monitoring_now": True,
+        }
+
+    if not monitoring_context["is_weekday"]:
+        return {
+            "status": "paused",
+            "status_label": "非交易日暂停",
+            "reason": "当前不是交易日，监控按照默认规则自动暂停。",
+            "monitoring_now": False,
+        }
+
+    return {
+        "status": "paused",
+        "status_label": "闭市暂停",
+        "reason": f"当前不在默认交易时段 {monitoring_context['session_label']} 内，监控自动暂停。",
+        "monitoring_now": False,
+    }
+
+
+def _parse_market_time(value: str) -> time:
+    return datetime.strptime(value, "%H:%M").time()
 
 
 def _build_research_workspace(query: str) -> dict[str, object]:
