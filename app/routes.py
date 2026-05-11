@@ -163,7 +163,8 @@ def recommendations() -> str:
 def system_capabilities() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
-    recent_runs = _build_recent_activity()
+    selected_symbol = request.args.get("symbol", "").strip()
+    recent_runs = _build_recent_activity(selected_symbol or None)
     monitoring_status = _monitoring_scheduler().status_snapshot()
     return render_template(
         "system.html",
@@ -171,6 +172,7 @@ def system_capabilities() -> str:
         settings=settings,
         recent_runs=recent_runs,
         monitoring_status=monitoring_status,
+        selected_symbol=selected_symbol,
         navigation=_WEB_NAVIGATION,
         active_nav="core.system_capabilities",
     )
@@ -314,8 +316,8 @@ def _build_alert_view_models() -> list[dict[str, object]]:
     ]
 
 
-def _build_recent_activity() -> list[dict[str, object]]:
-    recent_runs = _watchlist_repository().list_recent_analysis_runs()
+def _build_recent_activity(symbol: str | None = None) -> list[dict[str, object]]:
+    recent_runs = _watchlist_repository().list_recent_analysis_runs(symbol=symbol)
     return [
         {
             "symbol": item["symbol"],

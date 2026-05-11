@@ -86,6 +86,21 @@
         </span>
       </div>
 
+      <form action="{{ url_for('core.system_capabilities') }}" method="get" class="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <label class="block">
+          <span class="text-xs uppercase tracking-[0.18em] text-slate-500">按股票筛选</span>
+          <input
+            name="symbol"
+            value="{{ selected_symbol or '' }}"
+            placeholder="600519"
+            class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40"
+          />
+        </label>
+        <button type="submit" class="rounded-2xl border border-sky-400/30 bg-sky-300/10 px-5 py-3 text-sm font-medium text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-300/15">
+          筛选
+        </button>
+      </form>
+
       <div class="mt-4 grid gap-3">
         {% for run in recent_runs %}
           <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">

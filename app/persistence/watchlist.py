@@ -301,16 +301,29 @@ class WatchlistRepository:
             conn.commit()
         return cursor.rowcount > 0
 
-    def list_recent_analysis_runs(self, limit: int = 8) -> list[dict[str, object]]:
+    def list_recent_analysis_runs(
+        self,
+        limit: int = 8,
+        *,
+        symbol: str | None = None,
+    ) -> list[dict[str, object]]:
+        parameters: tuple[object, ...]
+        query = """
+            SELECT symbol, status, stale, detail, created_at
+            FROM analysis_runs
+        """
+        if symbol:
+            query += " WHERE symbol = ?"
+            parameters = (symbol.strip(), limit)
+            query += " ORDER BY id DESC LIMIT ?"
+        else:
+            parameters = (limit,)
+            query += " ORDER BY id DESC LIMIT ?"
+
         with self.database.connection() as conn:
             rows = conn.execute(
-                """
-                SELECT symbol, status, stale, detail, created_at
-                FROM analysis_runs
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (limit,),
+                query,
+                parameters,
             ).fetchall()
         return [
             {
