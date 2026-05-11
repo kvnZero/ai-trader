@@ -654,6 +654,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
         "mapping": _empty_mapping_summary(),
         "recommendation": _empty_recommendation_summary(),
         "recent_activity": _empty_research_recent_activity_summary(),
+        "recommendation_events": [],
         "errors": list(target["issues"]),
     }
 
@@ -667,6 +668,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
 
     symbol = str(target["symbol"])
     workspace["recent_activity"] = _build_research_recent_activity_summary(target)
+    workspace["recommendation_events"] = _build_recommendation_event_history(symbol, limit=3)
     market_service = build_default_market_data_service()
     snapshot_result = market_service.get_latest_snapshot(symbol)
     workspace["market"] = _build_market_summary(target=target, snapshot_result=snapshot_result)
