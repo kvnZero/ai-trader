@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import StrEnum
@@ -9,15 +10,84 @@ from app.domain import SentimentItem
 
 
 class SentimentIngestionError(Exception):
-    """Base error for the sentiment ingestion capability."""
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "sentiment_ingestion_error",
+        retryable: bool = False,
+        details: Mapping[str, object] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+        self.details = dict(details or {})
+        if cause is not None:
+            self.__cause__ = cause
 
 
 class SentimentSourceConfigurationError(SentimentIngestionError):
-    """Raised when a source definition cannot be ingested as configured."""
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: Mapping[str, object] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            code="sentiment_source_configuration_failed",
+            details=details,
+            cause=cause,
+        )
 
 
 class SentimentSourceNotRegisteredError(SentimentIngestionError):
-    """Raised when a source definition references an unknown adapter."""
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: Mapping[str, object] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            code="sentiment_source_not_registered",
+            details=details,
+        )
+
+
+class SentimentSourceUnavailableError(SentimentIngestionError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: Mapping[str, object] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            code="sentiment_source_unavailable",
+            retryable=True,
+            details=details,
+            cause=cause,
+        )
+
+
+class SentimentSourceNormalizationError(SentimentIngestionError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: Mapping[str, object] | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            code="sentiment_source_normalization_failed",
+            details=details,
+            cause=cause,
+        )
 
 
 class SentimentSourceCategory(StrEnum):

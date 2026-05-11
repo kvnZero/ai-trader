@@ -1,6 +1,7 @@
 """Independent sentiment ingestion capability package."""
 
 from app.modules.sentiment_ingestion.adapters import (
+    AKShareLiveNewsSourceAdapter,
     AkshareStockNewsAdapter,
     SampleSentimentSourceAdapter,
     SentimentSourceAdapter,
@@ -33,6 +34,7 @@ from app.modules.sentiment_ingestion.service import (
 
 __all__ = [
     "IngestedSentimentRecord",
+    "AKShareLiveNewsSourceAdapter",
     "AkshareStockNewsAdapter",
     "RawSentimentPayload",
     "SampleSentimentSourceAdapter",
