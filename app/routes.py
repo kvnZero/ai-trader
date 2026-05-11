@@ -24,7 +24,7 @@ from app.modules.technical_analysis import (
 )
 from app.modules.technical_analysis.contracts import TechnicalAnalysisResult
 from app.modules.trader_agent import build_default_trader_agent_service
-from app.persistence import AlertRepository, WatchlistRepository
+from app.persistence import AlertRepository, AlertRow, WatchlistRepository
 
 bp = Blueprint("core", __name__)
 
@@ -39,6 +39,11 @@ _DIRECTION_LABELS = {
     "bearish": "偏空",
     "neutral": "中性",
     "mixed": "分歧",
+}
+_ACTIVITY_KIND_LABELS = {
+    "scheduled": "自动刷新",
+    "research": "研究动作",
+    "other": "其他历史",
 }
 
 _WEB_NAVIGATION = (
@@ -76,13 +81,14 @@ def dashboard() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
     watchlist = _build_watchlist_view_models()
-    alerts = _build_alert_view_models()
+    alerts, alert_summary = _build_alert_view_models()
     return render_template(
         "dashboard.html",
         capabilities=capabilities,
         settings=settings,
         watchlist=watchlist,
         alerts=alerts,
+        alert_summary=alert_summary,
         alerts_for_title=alerts,
         navigation=_WEB_NAVIGATION,
         active_nav="core.dashboard",
@@ -167,14 +173,18 @@ def system_capabilities() -> str:
     recent_runs = _build_recent_activity(selected_symbol or None)
     monitoring_status = _monitoring_scheduler().status_snapshot()
     grouped_activity = _group_activity_by_kind(recent_runs)
+    activity_summary = _build_activity_summary(recent_runs)
+    quick_symbols = _build_quick_filter_symbols()
     return render_template(
         "system.html",
         capabilities=capabilities,
         settings=settings,
         recent_runs=recent_runs,
         grouped_activity=grouped_activity,
+        activity_summary=activity_summary,
         monitoring_status=monitoring_status,
         selected_symbol=selected_symbol,
+        quick_symbols=quick_symbols,
         navigation=_WEB_NAVIGATION,
         active_nav="core.system_capabilities",
     )
@@ -303,9 +313,9 @@ def _build_watchlist_view_models() -> list[dict[str, object]]:
     ]
 
 
-def _build_alert_view_models() -> list[dict[str, object]]:
+def _build_alert_view_models() -> tuple[list[dict[str, object]], dict[str, object]]:
     rows = _alert_repository().list_unread()
-    return [
+    alerts = [
         {
             "id": row.id,
             "symbol": row.symbol,
@@ -316,6 +326,28 @@ def _build_alert_view_models() -> list[dict[str, object]]:
         }
         for row in rows
     ]
+    return alerts, _build_alert_summary_view_model(rows, alerts)
+
+
+def _build_alert_summary_view_model(
+    rows: list[AlertRow], alerts: list[dict[str, object]]
+) -> dict[str, object]:
+    high_count = 0
+    medium_count = 0
+    for row in rows:
+        if row.level == "high":
+            high_count += 1
+        elif row.level == "medium":
+            medium_count += 1
+
+    top_alert = alerts[0] if alerts else None
+    return {
+        "total": len(rows),
+        "high_count": high_count,
+        "medium_count": medium_count,
+        "other_count": len(rows) - high_count - medium_count,
+        "top_alert": top_alert,
+    }
 
 
 def _build_recent_activity(symbol: str | None = None) -> list[dict[str, object]]:
@@ -332,15 +364,41 @@ def _build_recent_activity(symbol: str | None = None) -> list[dict[str, object]]
     ]
 
 
+def _build_activity_summary(recent_runs: list[dict[str, object]]) -> dict[str, object]:
+    counts = {kind: 0 for kind in _ACTIVITY_KIND_LABELS}
+    for item in recent_runs:
+        counts[_normalize_activity_kind(item["status"])] += 1
+
+    latest_run = recent_runs[0] if recent_runs else None
+    latest_kind = _normalize_activity_kind(latest_run["status"]) if latest_run else None
+    return {
+        "total_count": len(recent_runs),
+        "latest_label": _ACTIVITY_KIND_LABELS[latest_kind] if latest_kind else "暂无记录",
+        "latest_symbol": latest_run["symbol"] if latest_run else None,
+        "latest_created_at": latest_run["created_at"] if latest_run else None,
+        "counts": counts,
+    }
+
+
 def _group_activity_by_kind(recent_runs: list[dict[str, object]]) -> dict[str, list[dict[str, object]]]:
     groups = {"scheduled": [], "research": [], "other": []}
     for item in recent_runs:
-        kind = str(item["status"])
+        kind = _normalize_activity_kind(item["status"])
         if kind in groups:
             groups[kind].append(item)
         else:
             groups["other"].append(item)
     return groups
+
+
+def _normalize_activity_kind(status: object) -> str:
+    kind = str(status)
+    return kind if kind in {"scheduled", "research"} else "other"
+
+
+def _build_quick_filter_symbols() -> list[str]:
+    rows = _watchlist_repository().list_rows()
+    return [row.symbol for row in rows[:4]]
 
 
 def _build_research_watchlist_action(workspace: dict[str, object]) -> dict[str, object]:
