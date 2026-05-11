@@ -85,6 +85,7 @@ The user has explicitly authorized proactive requirement derivation. Future impl
 - The UI must clearly show current monitoring state, last refresh time, latest recommendation, and whether monitoring is paused because the market is closed.
 - Recommendation changes for watched stocks should produce in-site unread alerts.
 - In-site alerts should escalate to a blinking page title until the user has read or acknowledged the new content.
+- Sentiment ingestion must fail at source granularity: one bad source must not stop other sources, and source failures should be surfaced in the sentiment and research UIs instead of being hidden.
 
 ## Derived Capability Guidance
 
