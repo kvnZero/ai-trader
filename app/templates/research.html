@@ -68,7 +68,11 @@
           <div class="rounded-[1.75rem] border px-5 py-4 {% if workspace.recent_activity.has_watchlist_entry %}border-emerald-400/20 bg-emerald-300/5{% else %}border-amber-400/20 bg-amber-300/5{% endif %}">
             <p class="text-xs uppercase tracking-[0.18em] text-slate-500">当前状态</p>
             <p class="mt-2 text-lg font-semibold text-white">{{ workspace.recent_activity.status_label }}</p>
-            <p class="mt-2 text-sm text-slate-400">{{ workspace.recent_activity.display_name }}</p>
+            <p class="mt-2 text-sm text-slate-400">
+              <a href="{{ url_for('core.research', query=workspace.recent_activity.symbol) }}" class="transition hover:text-sky-200">
+                {{ workspace.recent_activity.display_name }}
+              </a>
+            </p>
           </div>
         {% endif %}
       </div>
