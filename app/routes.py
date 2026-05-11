@@ -232,6 +232,12 @@ def mark_all_alerts_read() -> tuple[object, int]:
     return jsonify({"status": "ok", "marked_count": marked_count}), 200
 
 
+@bp.post("/api/alerts/<int:alert_id>/mark-read")
+def mark_alert_read(alert_id: int) -> tuple[object, int]:
+    marked = _alert_repository().mark_read(alert_id)
+    return jsonify({"status": "ok", "alert_id": alert_id, "marked": marked}), 200
+
+
 @bp.get("/api/capabilities")
 def capabilities() -> tuple[object, int]:
     settings = _settings()

@@ -100,13 +100,24 @@
                   <div id="alert-panel-list" class="mt-4 space-y-3">
                     {% if alerts_for_title is defined and alerts_for_title %}
                       {% for alert in alerts_for_title %}
-                        <article class="alert-panel-item rounded-3xl border border-slate-800/80 bg-slate-900/65 p-4">
-                          <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ alert.symbol }}</span>
-                            <span class="text-xs text-slate-500">{{ alert.time }}</span>
+                        <article class="alert-panel-item rounded-3xl border border-slate-800/80 bg-slate-900/65 p-4" data-alert-id="{{ alert.id }}">
+                          <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                              <span class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ alert.symbol }}</span>
+                              <h4 class="mt-2 text-sm font-semibold text-white">{{ alert.title }}</h4>
+                              <p class="mt-2 text-sm leading-6 text-slate-300">{{ alert.summary }}</p>
+                            </div>
+                            <div class="flex flex-col items-end gap-2">
+                              <span class="text-xs text-slate-500">{{ alert.time }}</span>
+                              <button
+                                type="button"
+                                class="mark-alert-read-button rounded-full border border-slate-700 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-emerald-400/40 hover:bg-emerald-300/10 hover:text-emerald-100"
+                                data-mark-url="{{ url_for('core.mark_alert_read', alert_id=alert.id) }}"
+                              >
+                                已读
+                              </button>
+                            </div>
                           </div>
-                          <h4 class="mt-2 text-sm font-semibold text-white">{{ alert.title }}</h4>
-                          <p class="mt-2 text-sm leading-6 text-slate-300">{{ alert.summary }}</p>
                         </article>
                       {% endfor %}
                     {% else %}
@@ -135,12 +146,16 @@
           const alertPanelList = document.getElementById("alert-panel-list");
           const alertCount = document.getElementById("alert-bell-count");
           const markAlertsReadButton = document.getElementById("mark-alerts-read");
-          const alertItems = document.querySelectorAll(".alert-panel-item");
+          const markAlertReadButtons = document.querySelectorAll(".mark-alert-read-button");
           let currentUnreadCount = unreadCount;
           let acknowledged = false;
           let acknowledgePromise = null;
           let blinkOn = false;
           let timerId = null;
+
+          const getAlertItems = () => (
+            alertPanelList ? alertPanelList.querySelectorAll(".alert-panel-item") : []
+          );
 
           const renderReadState = () => {
             if (alertCount) {
@@ -152,8 +167,8 @@
               }
             }
 
-            if (alertItems.length > 0 && currentUnreadCount === 0) {
-              alertItems.forEach((item) => {
+            if (currentUnreadCount > 0) {
+              getAlertItems().forEach((item) => {
                 item.classList.add("opacity-60");
               });
             }
@@ -218,6 +233,38 @@
             return acknowledgePromise;
           };
 
+          const markSingleAlertRead = async (button) => {
+            const url = button.dataset.markUrl;
+            if (!url) {
+              return false;
+            }
+
+            const response = await window.fetch(url, {
+              method: "POST",
+              headers: {
+                "X-Requested-With": "XMLHttpRequest",
+              },
+            });
+
+            if (!response.ok) {
+              throw new Error(`Failed to mark alert read: ${response.status}`);
+            }
+
+            const alertItem = button.closest(".alert-panel-item");
+            if (alertItem) {
+              alertItem.remove();
+            }
+
+            currentUnreadCount = Math.max(0, currentUnreadCount - 1);
+            renderReadState();
+
+            if (currentUnreadCount === 0) {
+              renderEmptyState();
+              stopBlink();
+            }
+            return true;
+          };
+
           const togglePanel = () => {
             if (!alertPanel || !alertBellButton) {
               return;
@@ -255,6 +302,16 @@
               }
             });
           }
+
+          markAlertReadButtons.forEach((button) => {
+            button.addEventListener("click", async () => {
+              try {
+                await markSingleAlertRead(button);
+              } catch (error) {
+                console.error(error);
+              }
+            });
+          });
 
           document.addEventListener("visibilitychange", () => {
             if (!document.hidden) {
