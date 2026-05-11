@@ -20,6 +20,17 @@ class AlertRepository:
     def __init__(self, database: Database):
         self.database = database
 
+    def _row_to_alert(self, row) -> AlertRow:
+        return AlertRow(
+            id=int(row["id"]),
+            symbol=row["symbol"],
+            title=row["title"],
+            summary=row["summary"],
+            level=row["level"],
+            unread=bool(row["unread"]),
+            created_at=row["created_at"],
+        )
+
     def seed_defaults(self) -> None:
         defaults = (
             (
@@ -60,15 +71,31 @@ class AlertRepository:
                 ORDER BY created_at DESC, id DESC
                 """
             ).fetchall()
-        return [
-            AlertRow(
-                id=int(row["id"]),
-                symbol=row["symbol"],
-                title=row["title"],
-                summary=row["summary"],
-                level=row["level"],
-                unread=bool(row["unread"]),
-                created_at=row["created_at"],
+        return [self._row_to_alert(row) for row in rows]
+
+    def mark_read(self, alert_id: int) -> bool:
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE alerts
+                SET unread = 0,
+                    read_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND unread = 1
+                """,
+                (alert_id,),
             )
-            for row in rows
-        ]
+            conn.commit()
+        return cursor.rowcount > 0
+
+    def mark_all_read(self) -> int:
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE alerts
+                SET unread = 0,
+                    read_at = CURRENT_TIMESTAMP
+                WHERE unread = 1
+                """
+            )
+            conn.commit()
+        return cursor.rowcount

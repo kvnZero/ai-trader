@@ -128,14 +128,17 @@
         (() => {
           const originalTitle = document.title;
           const unreadCount = {{ alerts_for_title | length }};
+          const markAlertsReadUrl = "{{ url_for('core.mark_all_alerts_read') }}";
           const alertTitle = `(${unreadCount}) 新监控提醒`;
           const alertBellButton = document.getElementById("alert-bell-button");
           const alertPanel = document.getElementById("alert-panel");
+          const alertPanelList = document.getElementById("alert-panel-list");
           const alertCount = document.getElementById("alert-bell-count");
           const markAlertsReadButton = document.getElementById("mark-alerts-read");
           const alertItems = document.querySelectorAll(".alert-panel-item");
           let currentUnreadCount = unreadCount;
           let acknowledged = false;
+          let acknowledgePromise = null;
           let blinkOn = false;
           let timerId = null;
 
@@ -156,6 +159,18 @@
             }
           };
 
+          const renderEmptyState = () => {
+            if (!alertPanelList) {
+              return;
+            }
+
+            alertPanelList.innerHTML = `
+              <div id="alert-panel-empty" class="rounded-3xl border border-slate-800/80 bg-slate-900/65 p-4 text-sm text-slate-400">
+                当前没有未读提醒。
+              </div>
+            `;
+          };
+
           const stopBlink = () => {
             if (timerId !== null) {
               window.clearInterval(timerId);
@@ -164,14 +179,43 @@
             document.title = originalTitle;
           };
 
-          const acknowledge = () => {
+          const acknowledge = async () => {
             if (acknowledged) {
-              return;
+              return true;
             }
-            acknowledged = true;
-            currentUnreadCount = 0;
-            renderReadState();
-            stopBlink();
+
+            if (acknowledgePromise) {
+              return acknowledgePromise;
+            }
+
+            acknowledgePromise = window
+              .fetch(markAlertsReadUrl, {
+                method: "POST",
+                headers: {
+                  "X-Requested-With": "XMLHttpRequest",
+                },
+              })
+              .then((response) => {
+                if (!response.ok) {
+                  throw new Error(`Failed to mark alerts read: ${response.status}`);
+                }
+
+                acknowledged = true;
+                currentUnreadCount = 0;
+                renderReadState();
+                renderEmptyState();
+                stopBlink();
+                return true;
+              })
+              .catch((error) => {
+                console.error(error);
+                return false;
+              })
+              .finally(() => {
+                acknowledgePromise = null;
+              });
+
+            return acknowledgePromise;
           };
 
           const togglePanel = () => {
@@ -197,8 +241,12 @@
           }
 
           if (markAlertsReadButton) {
-            markAlertsReadButton.addEventListener("click", () => {
-              acknowledge();
+            markAlertsReadButton.addEventListener("click", async () => {
+              const markedRead = await acknowledge();
+              if (!markedRead) {
+                return;
+              }
+
               if (alertPanel) {
                 alertPanel.classList.add("hidden");
               }
@@ -210,11 +258,17 @@
 
           document.addEventListener("visibilitychange", () => {
             if (!document.hidden) {
-              acknowledge();
+              void acknowledge();
             }
           });
 
-          window.addEventListener("focus", acknowledge, { once: true });
+          window.addEventListener(
+            "focus",
+            () => {
+              void acknowledge();
+            },
+            { once: true },
+          );
           window.addEventListener("beforeunload", stopBlink);
         })();
       </script>
