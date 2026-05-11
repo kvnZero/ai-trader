@@ -564,6 +564,10 @@ def _build_sentiment_workspace() -> dict[str, object]:
         }
         for run in ingestion_result.source_runs
     ]
+    source_failure_summary = _build_sentiment_failure_summary(
+        ingestion_result=ingestion_result,
+        source_runs=source_runs,
+    )
 
     return {
         "total_items": len(items),
@@ -581,7 +585,101 @@ def _build_sentiment_workspace() -> dict[str, object]:
         "top_companies": top_companies,
         "top_tags": top_tags,
         "source_runs": source_runs,
+        "source_failure_summary": source_failure_summary,
         "source_names": [run["source"] for run in source_runs],
+    }
+
+
+def _build_sentiment_failure_summary(
+    *,
+    ingestion_result: object,
+    source_runs: list[dict[str, object]],
+) -> dict[str, object]:
+    raw_failures = list(getattr(ingestion_result, "source_failures", []) or [])
+    failures = [_normalize_sentiment_failure(failure) for failure in raw_failures]
+    reason_counts: dict[str, int] = {}
+    for failure in failures:
+        reason = failure["reason"]
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    reason_summary = [
+        f"{reason} ×{count}" if count > 1 else reason
+        for reason, count in sorted(reason_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    failed_sources = list(dict.fromkeys(failure["source"] for failure in failures if failure["source"]))
+
+    if not failures:
+        return {
+            "status": "healthy",
+            "label": "正常",
+            "message": "全部来源运行正常，未发现失败项。",
+            "failed_source_count": 0,
+            "total_source_count": len(source_runs),
+            "reason_summary": [],
+            "failures": [],
+        }
+
+    return {
+        "status": "degraded",
+        "label": "异常",
+        "message": f"{len(failed_sources) or len(failures)} 个来源失败，需检查抓取或解析链路。",
+        "failed_source_count": len(failed_sources) or len(failures),
+        "total_source_count": len(source_runs),
+        "reason_summary": reason_summary[:3],
+        "failures": failures[:3],
+    }
+
+
+def _normalize_sentiment_failure(failure: object) -> dict[str, object]:
+    def _mapping_value(value: object, key: str) -> object | None:
+        if isinstance(value, dict):
+            return value.get(key)
+        return getattr(value, key, None)
+
+    if isinstance(failure, dict):
+        source = (
+            failure.get("source_name")
+            or failure.get("source")
+            or failure.get("source_id")
+            or _mapping_value(failure.get("source_metadata"), "source_name")
+            or _mapping_value(failure.get("source_metadata"), "source_id")
+        )
+        reason = (
+            failure.get("reason")
+            or failure.get("error_code")
+            or failure.get("code")
+            or failure.get("type")
+        )
+        message = (
+            failure.get("error_message")
+            or failure.get("message")
+            or failure.get("detail")
+            or str(failure)
+        )
+    else:
+        source_metadata = getattr(failure, "source_metadata", None)
+        source = (
+            getattr(source_metadata, "source_name", None)
+            or getattr(source_metadata, "source_id", None)
+            or getattr(failure, "source_name", None)
+            or getattr(failure, "source", None)
+        )
+        reason = (
+            getattr(failure, "reason", None)
+            or getattr(failure, "error_code", None)
+            or getattr(failure, "code", None)
+            or type(failure).__name__
+        )
+        message = (
+            getattr(failure, "error_message", None)
+            or getattr(failure, "message", None)
+            or str(failure)
+        )
+
+    return {
+        "source": source or "未知来源",
+        "reason": str(reason or "未分类"),
+        "message": message,
     }
 
 

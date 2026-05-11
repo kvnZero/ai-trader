@@ -236,5 +236,45 @@
         {% endfor %}
       </div>
     </section>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Source Health</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">来源健康与失败摘要</h3>
+        </div>
+        <span class="rounded-full px-3 py-1 text-xs font-medium {% if workspace.source_failure_summary.status == 'healthy' %}border border-emerald-400/30 bg-emerald-300/10 text-emerald-200{% else %}border border-amber-400/30 bg-amber-300/10 text-amber-200{% endif %}">
+          {{ workspace.source_failure_summary.label }}
+        </span>
+      </div>
+
+      <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+        <div class="flex flex-wrap items-center gap-3 text-sm text-slate-300">
+          <span>失败来源 {{ workspace.source_failure_summary.failed_source_count }} / {{ workspace.source_failure_summary.total_source_count }}</span>
+          <span class="text-slate-600">|</span>
+          <span>{{ workspace.source_failure_summary.message }}</span>
+        </div>
+
+        {% if workspace.source_failure_summary.reason_summary %}
+          <div class="mt-3 flex flex-wrap gap-2">
+            {% for reason in workspace.source_failure_summary.reason_summary %}
+              <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ reason }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if workspace.source_failure_summary.failures %}
+          <div class="mt-4 grid gap-3 md:grid-cols-3">
+            {% for failure in workspace.source_failure_summary.failures %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4">
+                <p class="text-sm font-semibold text-white">{{ failure.source }}</p>
+                <p class="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{{ failure.reason }}</p>
+                <p class="mt-3 text-sm leading-6 text-slate-300">{{ failure.message }}</p>
+              </article>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </section>
   </section>
 {% endblock %}
