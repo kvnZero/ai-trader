@@ -32,6 +32,7 @@ class RefreshOutcome:
 class WatchlistRefreshService:
     MIN_REFRESH_GAP_SECONDS = 180
     LOW_CONFIDENCE_FLOOR = 0.34
+    NO_TRADE_CONFIDENCE_FLOOR = 0.20
 
     def __init__(
         self,
@@ -159,7 +160,10 @@ class WatchlistRefreshService:
         confidence = bundle.recommendation.confidence
         reason = bundle.recommendation.summary
 
-        if confidence < self.LOW_CONFIDENCE_FLOOR:
+        if confidence < self.NO_TRADE_CONFIDENCE_FLOOR:
+            recommendation = "avoid"
+            reason = f"信号质量不足，不执行交易：{reason}"
+        elif confidence < self.LOW_CONFIDENCE_FLOOR:
             recommendation = "watch" if recommendation != "sell" else "avoid"
             reason = f"信号质量不足，降级处理：{reason}"
 
