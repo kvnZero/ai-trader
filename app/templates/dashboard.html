@@ -354,29 +354,72 @@
         {% endfor %}
       </div>
 
-      <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Latest Research Action</p>
-            <p class="mt-2 text-sm font-semibold text-white">
-              {% if recent_research %}
-                {{ recent_research[0].symbol }}
-              {% else %}
-                暂无研究动作
-              {% endif %}
-            </p>
+      <div class="mt-4 grid gap-4 xl:grid-cols-2">
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Latest Research Action</p>
+              <p class="mt-2 text-sm font-semibold text-white">
+                {% if recent_research %}
+                  {{ recent_research[0].symbol }}
+                {% else %}
+                  暂无研究动作
+                {% endif %}
+              </p>
+            </div>
+            {% if recent_research %}
+              <span class="text-xs text-slate-500">{{ recent_research[0].created_at }}</span>
+            {% endif %}
           </div>
-          {% if recent_research %}
-            <span class="text-xs text-slate-500">{{ recent_research[0].created_at }}</span>
-          {% endif %}
+          <p class="mt-3 text-sm leading-7 text-slate-300">
+            {% if recent_research %}
+              {{ recent_research[0].detail }}
+            {% else %}
+              当你从研究页把标的加入关注列表时，这里会同步展示最近一条研究动作。
+            {% endif %}
+          </p>
         </div>
-        <p class="mt-3 text-sm leading-7 text-slate-300">
-          {% if recent_research %}
-            {{ recent_research[0].detail }}
-          {% else %}
-            当你从研究页把标的加入关注列表时，这里会同步展示最近一条研究动作。
-          {% endif %}
-        </p>
+
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Recommendation Events</p>
+              <p class="mt-2 text-sm font-semibold text-white">
+                {% if recommendation_events %}
+                  {{ recommendation_events[0].symbol }} 最新建议变化
+                {% else %}
+                  暂无建议变化
+                {% endif %}
+              </p>
+            </div>
+            <span class="rounded-full border border-emerald-400/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
+              {{ recommendation_events|length }} 条
+            </span>
+          </div>
+
+          <div class="mt-3 space-y-2">
+            {% for event in recommendation_events[:3] %}
+              {% set action_text = event.current_action|default('', true)|string|lower %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-semibold text-white">{{ event.symbol }}</span>
+                    <span class="rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] {% if action_text == 'buy' %}bg-emerald-300/10 text-emerald-200{% elif action_text == 'sell' or action_text == 'avoid' %}bg-rose-300/10 text-rose-200{% elif action_text == 'watch' %}bg-amber-300/10 text-amber-200{% else %}bg-slate-800/80 text-slate-300{% endif %}">
+                      {{ event.previous_action or "none" }} -> {{ event.current_action }}
+                    </span>
+                  </div>
+                  <span class="text-xs text-slate-500">{{ event.created_at }}</span>
+                </div>
+                <p class="mt-2 text-xs text-slate-500">置信度 {{ event.confidence }}</p>
+                <p class="mt-2 text-sm leading-6 text-slate-300">{{ event.summary|truncate(84) }}</p>
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3 text-sm text-slate-400">
+                当监控建议发生变化时，这里会汇总展示最近事件。
+              </div>
+            {% endfor %}
+          </div>
+        </div>
       </div>
     </section>
 
