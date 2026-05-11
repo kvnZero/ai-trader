@@ -138,7 +138,7 @@ def research_add_watchlist_stock() -> str:
     if symbol and name:
         _watchlist_repository().create_stock(symbol, name)
         _watchlist_repository().record_research_note(symbol, f"从研究页加入关注：{name}")
-    return redirect(url_for("core.research", query=symbol or name))
+    return redirect(url_for("core.system_capabilities", symbol=symbol or ""))
 
 
 @bp.get("/sentiment")
