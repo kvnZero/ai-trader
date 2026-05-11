@@ -82,6 +82,8 @@ def dashboard() -> str:
     capabilities = build_capability_catalog(settings)
     watchlist = _build_watchlist_view_models()
     alerts, alert_summary = _build_alert_view_models()
+    recent_activity = _build_recent_activity(limit=5)
+    recent_scheduled = [item for item in recent_activity if item["status"] == "scheduled"]
     return render_template(
         "dashboard.html",
         capabilities=capabilities,
@@ -89,6 +91,8 @@ def dashboard() -> str:
         watchlist=watchlist,
         alerts=alerts,
         alert_summary=alert_summary,
+        recent_activity=recent_activity,
+        recent_scheduled=recent_scheduled,
         alerts_for_title=alerts,
         navigation=_WEB_NAVIGATION,
         active_nav="core.dashboard",
