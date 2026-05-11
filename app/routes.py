@@ -170,8 +170,10 @@ def sentiment() -> str:
 
 @bp.get("/recommendations")
 def recommendations() -> str:
+    workspace = _build_recommendations_workspace()
     return render_template(
         "recommendations.html",
+        workspace=workspace,
         navigation=_WEB_NAVIGATION,
         active_nav="core.recommendations",
     )
@@ -381,6 +383,25 @@ def _build_recent_activity(symbol: str | None = None, *, limit: int = 8) -> list
         }
         for item in recent_runs
     ]
+
+
+def _build_recommendations_workspace() -> dict[str, object]:
+    watchlist_rows = _watchlist_repository().list_rows()
+    alerts, alert_summary = _build_alert_view_models()
+    recommendation_events = _build_recommendation_event_history(limit=6)
+    recent_activity = _build_recent_activity(limit=6)
+    return {
+        "watchlist_count": len(watchlist_rows),
+        "enabled_count": len([row for row in watchlist_rows if row.monitoring_enabled]),
+        "high_alert_count": alert_summary["high_count"],
+        "recommendation_event_count": len(recommendation_events),
+        "recent_activity_count": len(recent_activity),
+        "top_watchlist": watchlist_rows[:4],
+        "top_alert": alert_summary["top_alert"],
+        "recent_recommendation_events": recommendation_events,
+        "recent_activity": recent_activity,
+        "alerts": alerts,
+    }
 
 
 def _build_recommendation_event_history(
