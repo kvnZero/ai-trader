@@ -122,5 +122,52 @@
         {% endfor %}
       </div>
     </section>
+
+    <section class="grid gap-4 xl:grid-cols-3">
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Scheduled</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">自动刷新</h3>
+        <div class="mt-4 space-y-3">
+          {% for run in grouped_activity.scheduled %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-300">
+              <p class="font-medium text-white">{{ run.symbol }}</p>
+              <p class="mt-1 text-slate-400">{{ run.detail }}</p>
+            </div>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">暂无。</div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Research</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">研究动作</h3>
+        <div class="mt-4 space-y-3">
+          {% for run in grouped_activity.research %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-300">
+              <p class="font-medium text-white">{{ run.symbol }}</p>
+              <p class="mt-1 text-slate-400">{{ run.detail }}</p>
+            </div>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">暂无。</div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Other</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">其他历史</h3>
+        <div class="mt-4 space-y-3">
+          {% for run in grouped_activity.other %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-300">
+              <p class="font-medium text-white">{{ run.symbol }}</p>
+              <p class="mt-1 text-slate-400">{{ run.detail }}</p>
+            </div>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">暂无。</div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
   </section>
 {% endblock %}

@@ -166,11 +166,13 @@ def system_capabilities() -> str:
     selected_symbol = request.args.get("symbol", "").strip()
     recent_runs = _build_recent_activity(selected_symbol or None)
     monitoring_status = _monitoring_scheduler().status_snapshot()
+    grouped_activity = _group_activity_by_kind(recent_runs)
     return render_template(
         "system.html",
         capabilities=capabilities,
         settings=settings,
         recent_runs=recent_runs,
+        grouped_activity=grouped_activity,
         monitoring_status=monitoring_status,
         selected_symbol=selected_symbol,
         navigation=_WEB_NAVIGATION,
@@ -328,6 +330,17 @@ def _build_recent_activity(symbol: str | None = None) -> list[dict[str, object]]
         }
         for item in recent_runs
     ]
+
+
+def _group_activity_by_kind(recent_runs: list[dict[str, object]]) -> dict[str, list[dict[str, object]]]:
+    groups = {"scheduled": [], "research": [], "other": []}
+    for item in recent_runs:
+        kind = str(item["status"])
+        if kind in groups:
+            groups[kind].append(item)
+        else:
+            groups["other"].append(item)
+    return groups
 
 
 def _build_research_watchlist_action(workspace: dict[str, object]) -> dict[str, object]:
