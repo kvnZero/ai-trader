@@ -350,8 +350,8 @@ def _build_alert_summary_view_model(
     }
 
 
-def _build_recent_activity(symbol: str | None = None) -> list[dict[str, object]]:
-    recent_runs = _watchlist_repository().list_recent_analysis_runs(symbol=symbol)
+def _build_recent_activity(symbol: str | None = None, *, limit: int = 8) -> list[dict[str, object]]:
+    recent_runs = _watchlist_repository().list_recent_analysis_runs(symbol=symbol, limit=limit)
     return [
         {
             "symbol": item["symbol"],
@@ -399,6 +399,72 @@ def _normalize_activity_kind(status: object) -> str:
 def _build_quick_filter_symbols() -> list[str]:
     rows = _watchlist_repository().list_rows()
     return [row.symbol for row in rows[:4]]
+
+
+def _build_research_recent_activity_summary(target: dict[str, object]) -> dict[str, object]:
+    symbol = target["symbol"]
+    if symbol is None:
+        return _empty_research_recent_activity_summary()
+
+    symbol_str = str(symbol)
+    watchlist_row = _watchlist_repository().get_row(symbol_str)
+    recent_runs = _build_recent_activity(symbol_str, limit=3)
+    latest_run = recent_runs[0] if recent_runs else None
+    recent_research_note = next((item for item in recent_runs if item["status"] == "research"), None)
+    display_name = watchlist_row.name if watchlist_row is not None else target["display_name"]
+
+    if watchlist_row is None:
+        status_label = "未加入关注"
+        summary = "当前标的还不在关注列表中，但这里会保留最近的研究和分析记录。"
+    elif watchlist_row.monitoring_enabled:
+        status_label = watchlist_row.status_label
+        summary = "当前标的已在关注列表中，监控开启时会持续写入新的分析历史。"
+    else:
+        status_label = watchlist_row.status_label
+        summary = "当前标的已在关注列表中，但监控已关闭，仍可查看最近的研究历史。"
+
+    latest_focus_item = recent_research_note or latest_run
+    latest_focus_label = "最近加入关注" if recent_research_note is not None else "最近分析"
+    latest_focus_detail = latest_focus_item["detail"] if latest_focus_item is not None else "暂无分析或加入关注记录。"
+
+    return {
+        "available": True,
+        "symbol": symbol_str,
+        "display_name": display_name,
+        "status_label": status_label,
+        "summary": summary,
+        "latest_focus_label": latest_focus_label,
+        "latest_focus_detail": latest_focus_detail,
+        "last_analysis_at": watchlist_row.last_analysis_at if watchlist_row is not None else None,
+        "recent_count": len(recent_runs),
+        "recent_items": [
+            {
+                "status": item["status"],
+                "status_label": _ACTIVITY_KIND_LABELS[_normalize_activity_kind(item["status"])],
+                "detail": item["detail"],
+                "created_at": str(item["created_at"]).replace("T", " "),
+                "stale": item["stale"],
+            }
+            for item in recent_runs
+        ],
+        "has_watchlist_entry": watchlist_row is not None,
+    }
+
+
+def _empty_research_recent_activity_summary() -> dict[str, object]:
+    return {
+        "available": False,
+        "symbol": None,
+        "display_name": "未选择标的",
+        "status_label": None,
+        "summary": "解析出股票后，这里会显示最近是否加入关注，以及最近的分析记录。",
+        "latest_focus_label": None,
+        "latest_focus_detail": None,
+        "last_analysis_at": None,
+        "recent_count": 0,
+        "recent_items": [],
+        "has_watchlist_entry": False,
+    }
 
 
 def _build_research_watchlist_action(workspace: dict[str, object]) -> dict[str, object]:
@@ -551,6 +617,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
         "sentiment": _empty_sentiment_summary(),
         "mapping": _empty_mapping_summary(),
         "recommendation": _empty_recommendation_summary(),
+        "recent_activity": _empty_research_recent_activity_summary(),
         "errors": list(target["issues"]),
     }
 
@@ -563,6 +630,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
         return workspace
 
     symbol = str(target["symbol"])
+    workspace["recent_activity"] = _build_research_recent_activity_summary(target)
     market_service = build_default_market_data_service()
     snapshot_result = market_service.get_latest_snapshot(symbol)
     workspace["market"] = _build_market_summary(target=target, snapshot_result=snapshot_result)

@@ -57,6 +57,65 @@
       </div>
     </section>
 
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Recent Activity</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">最近关注 / 分析历史</h3>
+          <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-300">{{ workspace.recent_activity.summary }}</p>
+        </div>
+        {% if workspace.recent_activity.available %}
+          <div class="rounded-[1.75rem] border px-5 py-4 {% if workspace.recent_activity.has_watchlist_entry %}border-emerald-400/20 bg-emerald-300/5{% else %}border-amber-400/20 bg-amber-300/5{% endif %}">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">当前状态</p>
+            <p class="mt-2 text-lg font-semibold text-white">{{ workspace.recent_activity.status_label }}</p>
+            <p class="mt-2 text-sm text-slate-400">{{ workspace.recent_activity.display_name }}</p>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if workspace.recent_activity.available %}
+        <div class="mt-5 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ workspace.recent_activity.latest_focus_label }}</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.recent_activity.latest_focus_detail }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">最近分析时间</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.recent_activity.last_analysis_at or "--" }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">历史记录</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.recent_activity.recent_count }} 条</p>
+          </div>
+        </div>
+
+        <div class="mt-5 space-y-3">
+          {% for item in workspace.recent_activity.recent_items %}
+            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs uppercase tracking-[0.16em] text-slate-300">{{ item.status_label }}</span>
+                  {% if item.stale %}
+                    <span class="rounded-full border border-amber-400/30 bg-amber-300/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-amber-200">stale</span>
+                  {% endif %}
+                </div>
+                <span class="text-xs text-slate-500">{{ item.created_at }}</span>
+              </div>
+              <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.detail }}</p>
+            </article>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+              暂无与该标的相关的历史记录。
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+          输入股票代码或名称后，这里会显示最近是否加入关注，以及最近的研究记录。
+        </div>
+      {% endif %}
+    </section>
+
     {% if workspace.errors %}
       <section class="rounded-[2rem] border border-amber-400/20 bg-amber-300/5 p-5">
         <div class="flex items-start gap-4">
