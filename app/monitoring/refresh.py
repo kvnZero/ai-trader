@@ -5,6 +5,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
+from app.domain import SentimentItem
 from app.modules.entity_mapping import build_default_entity_mapping_service
 from app.modules.market_data import build_default_market_data_service
 from app.modules.recommendation_engine import build_default_recommendation_engine_service
@@ -42,11 +43,13 @@ class WatchlistRefreshService:
         watchlist_repository: WatchlistRepository,
         alert_repository: AlertRepository,
         recommendation_event_repository: RecommendationEventRepository,
+        sentiment_cache_reader: object | None = None,
     ):
         self.settings = settings
         self.watchlist_repository = watchlist_repository
         self.alert_repository = alert_repository
         self.recommendation_event_repository = recommendation_event_repository
+        self.sentiment_cache_reader = sentiment_cache_reader
         self.market_service = build_default_market_data_service()
         self.technical_service = build_default_technical_analysis_service()
         self.sentiment_service = build_default_sentiment_service()
@@ -139,10 +142,10 @@ class WatchlistRefreshService:
             return outcome
 
         analysis_result = self.technical_service.analyze_bars(bars_result.data)
-        sentiment_result = self.sentiment_service.ingest()
+        available_sentiment_items = self._load_sentiment_items(row.symbol)
         company_matches = []
-        sentiment_items = []
-        for item in sentiment_result.items:
+        sentiment_items: list[SentimentItem] = []
+        for item in available_sentiment_items:
             matches = self.entity_mapping_service.map_sentiment_item(item, min_confidence=0.18, max_matches=3)
             for match in matches:
                 if match.company.symbol == row.symbol:
@@ -232,6 +235,28 @@ class WatchlistRefreshService:
                 summary=outcome.reason,
                 level="high" if outcome.recommendation in {"buy", "sell"} else "medium",
             )
+
+    def _load_sentiment_items(self, symbol: str) -> list[SentimentItem]:
+        cache_reader = self.sentiment_cache_reader
+        if cache_reader is not None and hasattr(cache_reader, "read_latest"):
+            try:
+                snapshot = cache_reader.read_latest(symbols=[symbol])
+            except TypeError:
+                snapshot = cache_reader.read_latest()
+            except Exception:
+                snapshot = None
+            if snapshot:
+                cached_items = self._snapshot_items(snapshot)
+                if cached_items:
+                    return cached_items
+
+        return self.sentiment_service.ingest().items
+
+    def _snapshot_items(self, payload: object) -> list[SentimentItem]:
+        if isinstance(payload, dict):
+            items = payload.get("items")
+            return list(items) if isinstance(items, list) else []
+        return list(getattr(payload, "items", []) or [])
 
     def _now_label(self) -> str:
         timezone = ZoneInfo(self.settings.market_timezone)

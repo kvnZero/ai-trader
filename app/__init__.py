@@ -1,37 +1,35 @@
 from flask import Flask
 
-from app.config import get_settings
-from app.monitoring import MarketHoursMonitoringScheduler, WatchlistRefreshService
-from app.persistence import AlertRepository, RecommendationEventRepository, WatchlistRepository, init_database
+from app.workers.runtime import (
+    InactiveMonitoringScheduler,
+    build_monitoring_scheduler,
+    build_worker_runtime,
+    embedded_monitoring_enabled,
+)
+from app.persistence import SentimentRepository
 from app.routes import bp as core_blueprint
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    settings = get_settings()
-    database = init_database(settings.database_path)
-    watchlist_repository = WatchlistRepository(database)
-    alert_repository = AlertRepository(database)
-    recommendation_event_repository = RecommendationEventRepository(database)
-    refresh_service = WatchlistRefreshService(
-        settings=settings,
-        watchlist_repository=watchlist_repository,
-        alert_repository=alert_repository,
-        recommendation_event_repository=recommendation_event_repository,
-    )
+    runtime = build_worker_runtime()
+    scheduler = InactiveMonitoringScheduler()
+    if embedded_monitoring_enabled():
+        _, scheduler = build_monitoring_scheduler(
+            settings=runtime.settings,
+            interval_seconds=300,
+        )
+        scheduler.start()
 
-    watchlist_repository.seed_defaults()
-    alert_repository.seed_defaults()
-
-    scheduler = MarketHoursMonitoringScheduler(settings=settings, refresh_service=refresh_service, interval_seconds=300)
-    scheduler.start()
-
-    app.config["TRADER_SETTINGS"] = settings
-    app.config["TRADER_DATABASE"] = database
-    app.config["TRADER_WATCHLIST_REPOSITORY"] = watchlist_repository
-    app.config["TRADER_ALERT_REPOSITORY"] = alert_repository
-    app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = recommendation_event_repository
-    app.config["TRADER_WATCHLIST_REFRESH_SERVICE"] = refresh_service
+    app.config["TRADER_SETTINGS"] = runtime.settings
+    app.config["TRADER_DATABASE"] = runtime.watchlist_repository.database
+    app.config["TRADER_WATCHLIST_REPOSITORY"] = runtime.watchlist_repository
+    app.config["TRADER_ALERT_REPOSITORY"] = runtime.alert_repository
+    app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = runtime.recommendation_event_repository
+    app.config["TRADER_SENTIMENT_REPOSITORY"] = SentimentRepository(runtime.watchlist_repository.database)
+    app.config["TRADER_SENTIMENT_CACHE_READER"] = app.config["TRADER_SENTIMENT_REPOSITORY"]
+    app.config["TRADER_WATCHLIST_REFRESH_SERVICE"] = runtime.refresh_service
     app.config["TRADER_MONITORING_SCHEDULER"] = scheduler
+    app.config["TRADER_EMBEDDED_MONITORING_ENABLED"] = embedded_monitoring_enabled()
     app.register_blueprint(core_blueprint)
 
     return app
