@@ -173,6 +173,49 @@ class TechnicalAnalysisService:
             sum(assessment.bearish_score for assessment in assessments) / len(assessments),
             3,
         )
+        confirmation_score = self._build_confirmation_score(
+            sma_5=sma_5,
+            sma_10=sma_10,
+            sma_20=sma_20,
+            sma_60=sma_60,
+            ema_12=ema_12,
+            ema_26=ema_26,
+            volume_ratio_5d=volume_ratio_5d,
+            volume_ratio_20d=volume_ratio_20d,
+            change_10d=change_10d,
+        )
+        market_regime, market_regime_label = self._detect_market_regime(
+            bullish_score=bullish_score,
+            bearish_score=bearish_score,
+            change_10d=change_10d,
+            change_5d=change_5d,
+            volume_ratio_5d=volume_ratio_5d,
+            sma_5=sma_5,
+            sma_20=sma_20,
+            sma_60=sma_60,
+            intraday_range_percent=intraday_range_percent,
+        )
+        indicator_snapshot = TechnicalIndicatorSnapshot(
+            symbol=prepared.symbol,
+            sma_5=sma_5,
+            sma_10=sma_10,
+            sma_20=sma_20,
+            sma_60=sma_60,
+            ema_12=ema_12,
+            ema_26=ema_26,
+            change_1d=change_1d,
+            change_5d=change_5d,
+            change_10d=change_10d,
+            momentum_acceleration_5d=momentum_acceleration_5d,
+            volume_ratio_5d=volume_ratio_5d,
+            volume_ratio_20d=volume_ratio_20d,
+            intraday_range_percent=intraday_range_percent,
+            breakout_level=breakout_level,
+            breakdown_level=breakdown_level,
+            confirmation_score=confirmation_score,
+            market_regime=market_regime,
+            market_regime_label=market_regime_label,
+        )
         trend_direction = self._resolve_direction(
             bullish_score=bullish_score,
             bearish_score=bearish_score,
@@ -182,12 +225,84 @@ class TechnicalAnalysisService:
             latest_bar=latest_bar,
             analyzed_bar_count=len(prepared.bars),
             trend_direction=trend_direction,
+            market_regime=market_regime,
+            market_regime_label=market_regime_label,
+            confirmation_score=confirmation_score,
             indicator_snapshot=indicator_snapshot,
             signals=signals,
             bullish_score=bullish_score,
             bearish_score=bearish_score,
             warnings=list(prepared.warnings),
         )
+
+    def _build_confirmation_score(
+        self,
+        *,
+        sma_5: float | None,
+        sma_10: float | None,
+        sma_20: float | None,
+        sma_60: float | None,
+        ema_12: float | None,
+        ema_26: float | None,
+        volume_ratio_5d: float | None,
+        volume_ratio_20d: float | None,
+        change_10d: float | None,
+    ) -> float:
+        score = 0.0
+        total = 0.0
+
+        def add(condition: bool | None, weight: float) -> None:
+            nonlocal score, total
+            total += weight
+            if condition:
+                score += weight
+
+        add(sma_5 is not None and sma_20 is not None and sma_5 > sma_20, 0.2)
+        add(sma_20 is not None and sma_60 is not None and sma_20 > sma_60, 0.2)
+        add(ema_12 is not None and ema_26 is not None and ema_12 > ema_26, 0.15)
+        add(volume_ratio_5d is not None and volume_ratio_5d >= 1.0, 0.15)
+        add(volume_ratio_20d is not None and volume_ratio_20d >= 1.0, 0.1)
+        add(change_10d is not None and abs(change_10d) >= 0.03, 0.1)
+        add(sma_10 is not None and sma_20 is not None and abs(sma_10 - sma_20) / max(sma_20, 1e-6) < 0.05, 0.1)
+
+        if total == 0:
+            return 0.0
+        return round(score / total, 3)
+
+    def _detect_market_regime(
+        self,
+        *,
+        bullish_score: float,
+        bearish_score: float,
+        change_10d: float | None,
+        change_5d: float | None,
+        volume_ratio_5d: float | None,
+        sma_5: float | None,
+        sma_20: float | None,
+        sma_60: float | None,
+        intraday_range_percent: float | None,
+    ) -> tuple[str, str]:
+        bullish_bias = bullish_score >= bearish_score
+        bearish_bias = bearish_score > bullish_score
+        price_accel = abs(change_10d or 0.0)
+        short_term_change = change_5d or 0.0
+        vol = volume_ratio_5d or 0.0
+        range_pct = intraday_range_percent or 0.0
+
+        if bearish_bias and price_accel > 0.05 and vol >= 1.2 and range_pct >= 0.03:
+            return "panic", "恐慌"
+        if bullish_bias and short_term_change > 0 and price_accel > 0.03 and vol >= 1.0:
+            return "trend", "趋势"
+        if bullish_bias and short_term_change > 0 and price_accel <= 0.03 and vol >= 0.9 and sma_5 and sma_20 and sma_5 > sma_20:
+            return "rebound", "反弹"
+        if bearish_bias and short_term_change < 0 and price_accel <= 0.04 and vol <= 1.0:
+            return "range", "震荡"
+        if sma_5 is not None and sma_20 is not None and sma_60 is not None:
+            if sma_5 > sma_20 > sma_60 and bullish_bias:
+                return "trend", "趋势"
+            if sma_5 < sma_20 < sma_60 and bearish_bias:
+                return "panic", "恐慌"
+        return "range", "震荡"
 
     def _prepare_bars(self, bars: Sequence[MarketBar]) -> _PreparedBars:
         if not bars:

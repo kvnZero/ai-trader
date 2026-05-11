@@ -23,6 +23,9 @@ class TechnicalIndicatorSnapshot:
     intraday_range_percent: float | None = None
     breakout_level: float | None = None
     breakdown_level: float | None = None
+    confirmation_score: float | None = None
+    market_regime: str | None = None
+    market_regime_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +34,9 @@ class TechnicalAnalysisResult:
     latest_bar: MarketBar
     analyzed_bar_count: int
     trend_direction: SignalDirection
+    market_regime: str
+    market_regime_label: str
+    confirmation_score: float
     indicator_snapshot: TechnicalIndicatorSnapshot
     signals: list[TechnicalSignal] = field(default_factory=list)
     bullish_score: float = 0.0
