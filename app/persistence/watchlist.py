@@ -250,3 +250,25 @@ class WatchlistRepository:
             )
             conn.commit()
         return cursor.rowcount > 0
+
+    def list_recent_analysis_runs(self, limit: int = 8) -> list[dict[str, object]]:
+        with self.database.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT symbol, status, stale, detail, created_at
+                FROM analysis_runs
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "symbol": row["symbol"],
+                "status": row["status"],
+                "stale": bool(row["stale"]),
+                "detail": row["detail"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]

@@ -147,10 +147,12 @@ def recommendations() -> str:
 def system_capabilities() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
+    recent_runs = _watchlist_repository().list_recent_analysis_runs()
     return render_template(
         "system.html",
         capabilities=capabilities,
         settings=settings,
+        recent_runs=recent_runs,
         navigation=_WEB_NAVIGATION,
         active_nav="core.system_capabilities",
     )

@@ -28,5 +28,38 @@
         </article>
       {% endfor %}
     </div>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Analysis Runs</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">最近自动刷新记录</h3>
+        </div>
+        <span class="rounded-full border border-sky-400/30 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-200">
+          {{ recent_runs|length }} 条
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3">
+        {% for run in recent_runs %}
+          <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <h4 class="text-sm font-semibold text-white">{{ run.symbol }}</h4>
+                <p class="mt-1 text-sm text-slate-400">{{ run.detail }}</p>
+              </div>
+              <div class="text-right text-xs text-slate-500">
+                <p>{{ run.created_at }}</p>
+                <p class="mt-1">{{ run.status }}{% if run.stale %} · stale{% endif %}</p>
+              </div>
+            </div>
+          </article>
+        {% else %}
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+            暂无分析运行记录。
+          </div>
+        {% endfor %}
+      </div>
+    </section>
   </section>
 {% endblock %}
