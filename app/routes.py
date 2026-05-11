@@ -62,6 +62,10 @@ def _alert_repository() -> AlertRepository:
     return current_app.config["TRADER_ALERT_REPOSITORY"]
 
 
+def _monitoring_scheduler():
+    return current_app.config["TRADER_MONITORING_SCHEDULER"]
+
+
 @bp.get("/")
 def index() -> str:
     return dashboard()
@@ -148,11 +152,13 @@ def system_capabilities() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
     recent_runs = _watchlist_repository().list_recent_analysis_runs()
+    monitoring_status = _monitoring_scheduler().status_snapshot()
     return render_template(
         "system.html",
         capabilities=capabilities,
         settings=settings,
         recent_runs=recent_runs,
+        monitoring_status=monitoring_status,
         navigation=_WEB_NAVIGATION,
         active_nav="core.system_capabilities",
     )

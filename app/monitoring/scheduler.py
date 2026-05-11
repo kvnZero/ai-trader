@@ -29,6 +29,7 @@ class MarketHoursMonitoringScheduler:
         self.interval_seconds = interval_seconds
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._last_tick: MonitoringTickResult | None = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -48,11 +49,13 @@ class MarketHoursMonitoringScheduler:
         if market_open:
             outcomes = self.refresh_service.refresh_enabled(source="scheduled")
             processed_symbols = [outcome.symbol for outcome in outcomes]
-        return MonitoringTickResult(
+        result = MonitoringTickResult(
             processed_symbols=processed_symbols,
             market_open=market_open,
             tick_at=now.strftime("%Y-%m-%d %H:%M"),
         )
+        self._last_tick = result
+        return result
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -72,3 +75,20 @@ class MarketHoursMonitoringScheduler:
 
     def _parse_time(self, value: str) -> dtime:
         return datetime.strptime(value, "%H:%M").time()
+
+    def status_snapshot(self) -> dict[str, object]:
+        tick = self._last_tick
+        if tick is None:
+            return {
+                "has_tick": False,
+                "tick_at": None,
+                "market_open": None,
+                "processed_symbols": [],
+            }
+
+        return {
+            "has_tick": True,
+            "tick_at": tick.tick_at,
+            "market_open": tick.market_open,
+            "processed_symbols": list(tick.processed_symbols),
+        }

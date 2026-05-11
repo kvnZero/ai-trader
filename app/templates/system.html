@@ -32,6 +32,52 @@
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Monitoring Scheduler</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">最近一次自动调度</h3>
+        </div>
+        <span class="rounded-full border border-sky-400/30 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-200">
+          {% if monitoring_status.has_tick %}已运行{% else %}未运行{% endif %}
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-3">
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">最近时间</p>
+          <p class="mt-2 text-sm font-medium text-white">{{ monitoring_status.tick_at or "--" }}</p>
+        </div>
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">市场状态</p>
+          <p class="mt-2 text-sm font-medium {% if monitoring_status.market_open %}text-emerald-200{% else %}text-amber-200{% endif %}">
+            {% if monitoring_status.market_open is none %}
+              --
+            {% elif monitoring_status.market_open %}
+              开市运行
+            {% else %}
+              闭市暂停
+            {% endif %}
+          </p>
+        </div>
+        <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">处理标的</p>
+          <p class="mt-2 text-sm font-medium text-white">{{ monitoring_status.processed_symbols | length }}</p>
+        </div>
+      </div>
+
+      <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+        <p class="text-xs uppercase tracking-[0.18em] text-slate-500">处理列表</p>
+        <p class="mt-2 text-sm leading-7 text-slate-300">
+          {% if monitoring_status.processed_symbols %}
+            {{ monitoring_status.processed_symbols | join(" / ") }}
+          {% else %}
+            暂无调度记录。
+          {% endif %}
+        </p>
+      </div>
+    </section>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
           <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Analysis Runs</p>
           <h3 class="mt-2 text-2xl font-semibold text-white">最近自动刷新记录</h3>
         </div>
