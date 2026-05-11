@@ -97,6 +97,28 @@
           监控期间系统会持续刷新行情与建议；闭市后自动暂停，除非用户手动覆盖。
         </div>
 
+        <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Add Watchlist Stock</p>
+              <h4 class="mt-2 text-base font-semibold text-white">加入新的监控标的</h4>
+            </div>
+          </div>
+          <form action="{{ url_for('core.add_watchlist_stock') }}" method="post" class="mt-4 grid gap-3 md:grid-cols-[1fr_1.2fr_auto] md:items-end">
+            <label class="block">
+              <span class="text-xs uppercase tracking-[0.18em] text-slate-500">股票代码</span>
+              <input name="symbol" required maxlength="12" class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" placeholder="600519">
+            </label>
+            <label class="block">
+              <span class="text-xs uppercase tracking-[0.18em] text-slate-500">股票名称</span>
+              <input name="name" required maxlength="32" class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" placeholder="贵州茅台">
+            </label>
+            <button type="submit" class="rounded-2xl border border-emerald-400/30 bg-emerald-300/10 px-5 py-3 text-sm font-medium text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-300/15">
+              加入监控
+            </button>
+          </form>
+        </div>
+
         <div class="mt-4 space-y-3">
           {% for item in watchlist %}
             <article class="rounded-3xl border px-4 py-4 {% if item.unread %}border-amber-400/30 bg-amber-300/5{% else %}border-slate-800/80 bg-slate-950/55{% endif %}">
@@ -120,6 +142,18 @@
                     <p>建议：<span class="font-medium text-white">{{ item.recommendation | upper }}</span></p>
                     <p>置信度：<span class="font-medium text-white">{{ "%.0f"|format(item.confidence * 100) }}%</span></p>
                     <p>最近分析：<span class="font-medium text-white">{{ item.last_analysis_at }}</span></p>
+                  </div>
+                  <div class="mt-4 space-y-2">
+                    <form action="{{ url_for('core.toggle_watchlist_stock', symbol=item.symbol) }}" method="post">
+                      <button type="submit" class="w-full rounded-2xl border px-4 py-2 text-sm font-medium transition {% if item.monitoring_enabled %}border-amber-400/30 bg-amber-300/10 text-amber-100 hover:border-amber-300/60 hover:bg-amber-300/15{% else %}border-emerald-400/30 bg-emerald-300/10 text-emerald-100 hover:border-emerald-300/60 hover:bg-emerald-300/15{% endif %}">
+                        {% if item.monitoring_enabled %}停用监控{% else %}启用监控{% endif %}
+                      </button>
+                    </form>
+                    <form action="{{ url_for('core.delete_watchlist_stock', symbol=item.symbol) }}" method="post" onsubmit="return confirm('确定将 {{ item.symbol }} 从监控中移除吗？');">
+                      <button type="submit" class="w-full rounded-2xl border border-slate-700 bg-slate-950/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-rose-400/40 hover:bg-rose-300/10 hover:text-rose-100">
+                        移除
+                      </button>
+                    </form>
                   </div>
                 </div>
               </div>

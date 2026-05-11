@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from app.persistence.db import Database
 
 
+DEFAULT_SCHEDULE_LABEL = "工作日 09:30-11:30 / 13:00-15:00"
+DEFAULT_STATUS_LABEL = "监控中"
+DISABLED_STATUS_LABEL = "未开启"
+DEFAULT_LATEST_REASON = "等待首次分析。"
+
+
 @dataclass(frozen=True, slots=True)
 class WatchlistRow:
     symbol: str
@@ -31,7 +37,7 @@ class WatchlistRepository:
                 "贵州茅台",
                 1,
                 1,
-                "工作日 09:30-11:30 / 13:00-15:00",
+                DEFAULT_SCHEDULE_LABEL,
                 "active",
                 "监控中",
                 "buy",
@@ -44,7 +50,7 @@ class WatchlistRepository:
                 "宁德时代",
                 1,
                 1,
-                "工作日 09:30-11:30 / 13:00-15:00",
+                DEFAULT_SCHEDULE_LABEL,
                 "paused",
                 "闭市暂停",
                 "watch",
@@ -109,3 +115,61 @@ class WatchlistRepository:
             )
             for row in rows
         ]
+
+    def create_stock(self, symbol: str, name: str) -> bool:
+        symbol = symbol.strip()
+        name = name.strip()
+        if not symbol or not name:
+            return False
+
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO watchlist_stocks (
+                    symbol, name, monitoring_enabled, use_default_schedule, schedule_label,
+                    status, status_label, latest_recommendation, latest_confidence,
+                    latest_reason, last_analysis_at
+                ) VALUES (?, ?, 1, 1, ?, 'active', ?, 'watch', 0.0, ?, NULL)
+                ON CONFLICT(symbol) DO UPDATE SET
+                    name = excluded.name,
+                    monitoring_enabled = 1,
+                    use_default_schedule = 1,
+                    schedule_label = excluded.schedule_label,
+                    status = excluded.status,
+                    status_label = excluded.status_label,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (symbol, name, DEFAULT_SCHEDULE_LABEL, DEFAULT_STATUS_LABEL, DEFAULT_LATEST_REASON),
+            )
+            conn.commit()
+        return cursor.rowcount > 0
+
+    def delete_stock(self, symbol: str) -> bool:
+        symbol = symbol.strip()
+        if not symbol:
+            return False
+
+        with self.database.connection() as conn:
+            cursor = conn.execute("DELETE FROM watchlist_stocks WHERE symbol = ?", (symbol,))
+            conn.commit()
+        return cursor.rowcount > 0
+
+    def toggle_stock_monitoring(self, symbol: str) -> bool:
+        symbol = symbol.strip()
+        if not symbol:
+            return False
+
+        with self.database.connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE watchlist_stocks
+                SET monitoring_enabled = CASE monitoring_enabled WHEN 1 THEN 0 ELSE 1 END,
+                    status = CASE monitoring_enabled WHEN 1 THEN 'disabled' ELSE 'active' END,
+                    status_label = CASE monitoring_enabled WHEN 1 THEN ? ELSE ? END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE symbol = ?
+                """,
+                (DISABLED_STATUS_LABEL, DEFAULT_STATUS_LABEL, symbol),
+            )
+            conn.commit()
+        return cursor.rowcount > 0

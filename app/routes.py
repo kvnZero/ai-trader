@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
 
 from app.config import Settings
 from app.domain.serialization import to_json_ready
@@ -61,6 +61,27 @@ def dashboard() -> str:
     )
 
 
+@bp.post("/watchlist")
+def add_watchlist_stock() -> str:
+    symbol = request.form.get("symbol", "").strip()
+    name = request.form.get("name", "").strip()
+    if symbol and name:
+        _watchlist_repository().create_stock(symbol, name)
+    return redirect(url_for("core.dashboard"))
+
+
+@bp.post("/watchlist/<symbol>/toggle")
+def toggle_watchlist_stock(symbol: str) -> str:
+    _watchlist_repository().toggle_stock_monitoring(symbol)
+    return redirect(url_for("core.dashboard"))
+
+
+@bp.post("/watchlist/<symbol>/delete")
+def delete_watchlist_stock(symbol: str) -> str:
+    _watchlist_repository().delete_stock(symbol)
+    return redirect(url_for("core.dashboard"))
+
+
 @bp.get("/research")
 def research() -> str:
     return render_template(
@@ -109,6 +130,12 @@ def health() -> tuple[dict[str, object], int]:
         "application": settings.app_name,
         "environment": settings.environment,
     }, 200
+
+
+@bp.post("/api/alerts/mark-all-read")
+def mark_all_alerts_read() -> tuple[object, int]:
+    marked_count = _alert_repository().mark_all_read()
+    return jsonify({"status": "ok", "marked_count": marked_count}), 200
 
 
 @bp.get("/api/capabilities")
