@@ -158,10 +158,17 @@ class WatchlistRefreshService:
             evaluation_at=snapshot_result.data.captured_at,
         )
         recommendation = bundle.recommendation.action.value
-        confidence = bundle.recommendation.confidence
+        confirmation_score = analysis_result.confirmation_score
+        confidence = round(
+            bundle.recommendation.confidence * (0.7 + 0.3 * confirmation_score),
+            3,
+        )
         reason = bundle.recommendation.summary
 
-        if confidence < self.NO_TRADE_CONFIDENCE_FLOOR:
+        if confirmation_score < 0.35:
+            recommendation = "avoid" if recommendation == "sell" else "watch"
+            reason = f"技术确认度不足，降级处理：{reason}"
+        elif confidence < self.NO_TRADE_CONFIDENCE_FLOOR:
             recommendation = "avoid"
             reason = f"信号质量不足，不执行交易：{reason}"
         elif confidence < self.LOW_CONFIDENCE_FLOOR:
