@@ -88,6 +88,7 @@ def dashboard() -> str:
     alerts, alert_summary = _build_alert_view_models()
     recent_activity = _build_recent_activity(limit=5)
     recommendation_events = _build_recommendation_event_history(limit=5)
+    event_watch = _build_market_event_watch()
     recent_scheduled = [item for item in recent_activity if item["status"] == "scheduled"]
     recent_research = [item for item in recent_activity if item["status"] == "research"]
     return render_template(
@@ -99,6 +100,7 @@ def dashboard() -> str:
         alert_summary=alert_summary,
         recent_activity=recent_activity,
         recommendation_events=recommendation_events,
+        event_watch=event_watch,
         recent_scheduled=recent_scheduled,
         recent_research=recent_research,
         alerts_for_title=alerts,
@@ -139,11 +141,13 @@ def research() -> str:
     query = request.args.get("query", "").strip()
     workspace = _build_research_workspace(query)
     watchlist_action = _build_research_watchlist_action(workspace)
+    event_watch = _build_market_event_watch()
     return render_template(
         "research.html",
         query=query,
         workspace=workspace,
         watchlist_action=watchlist_action,
+        event_watch=event_watch,
         navigation=_WEB_NAVIGATION,
         active_nav="core.research",
     )
