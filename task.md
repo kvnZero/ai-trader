@@ -22,6 +22,7 @@ Build an AI-assisted A-share investment research system with independently deliv
 6. Implementation cadence must follow small-feature commits: complete one small functional unit, commit it, then move to the next.
 7. Ambiguous product details should be completed proactively using sound financial-system design judgment.
 8. User-facing monitoring and alerting should surface unread recommendation changes clearly enough that important updates are not silently missed.
+9. The system should explicitly support "no-trade" outputs when evidence is noisy or low quality.
 
 ## Module Boundaries
 
@@ -259,12 +260,15 @@ Ensure the system is measurable, explainable, and controlled before heavier auto
 - Recommendation quality checks
 - Logging/observability for source failures, mapping failures, and agent output issues
 - Risk disclaimers and usage boundaries for investment advice scenarios
+- Market-regime evaluation, liquidity checks, event-calendar checks, and setup-quality scoring
 
 **Acceptance Criteria**
 
 - Each core module has at least one independent verification path
 - Recommendation output can be reviewed after the fact with sufficient evidence
 - The system clearly identifies when it lacks enough information to issue a confident signal
+- Backtests or replay tests can compare setup quality across different market regimes
+- The system can explain when it chooses not to trade
 
 ## Suggested Implementation Order
 
@@ -319,6 +323,11 @@ Ensure the system is measurable, explainable, and controlled before heavier auto
 - Complete `T011` and `T012`
 - Outcome: make the pipeline observable, reviewable, and production-ready enough for ongoing usage
 
+### Milestone F: Signal Quality Uplift
+
+- Complete regime detection, event calendar, liquidity filters, and no-trade logic
+- Outcome: improve signal quality and reduce false positives without promising returns
+
 ## Current Scope Notes
 
 1. The project should start with research and recommendation support, not direct brokerage execution.
@@ -326,3 +335,4 @@ Ensure the system is measurable, explainable, and controlled before heavier auto
 3. The first version should prioritize explainability and modularity over full automation.
 4. The system should proactively include adjacent expert capabilities when they materially improve recommendation quality, such as risk controls, sector/theme context, data staleness handling, and evidence traceability.
 5. Watchlist monitoring should default to in-site use first, with external notification channels deferred until the in-site alert flow is reliable.
+6. The system should prefer "setup quality" and "avoid bad trades" over forcing a trade recommendation.

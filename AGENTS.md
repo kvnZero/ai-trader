@@ -66,6 +66,12 @@ The user has explicitly authorized proactive requirement derivation. Future impl
 - Prefer conservative confidence scoring when entity mapping or sentiment attribution is ambiguous.
 - Always preserve enough structured evidence for later review of why a recommendation was produced.
 - Default market-hour monitoring should align with A-share sessions on trading days and pause outside those windows unless the user explicitly overrides it.
+- Include market regime detection so the system can distinguish trend, range, panic, and rebound phases before issuing suggestions.
+- Include liquidity and slippage awareness so small-cap, low-volume, or wide-spread names can be down-weighted.
+- Include event-calendar awareness for earnings, announcements, ex-dividend dates, unlocks, and major macro events.
+- Include multi-timeframe confirmation so a short-term signal is not treated as stronger than the broader trend.
+- Include a "no-trade" outcome when evidence quality is weak or the setup is too noisy.
+- Include post-signal review so the system can learn which setups historically worked better.
 
 ## Monitoring Requirements
 
