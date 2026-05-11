@@ -261,6 +261,7 @@ def _build_watchlist_view_models() -> list[dict[str, object]]:
             "status": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["status"],
             "status_label": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["status_label"],
             "status_reason": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["reason"],
+            "context_label": _resolve_watchlist_status(row=row, monitoring_context=monitoring_context)["context_label"],
             "last_analysis_at": row.last_analysis_at or "--",
             "recommendation": row.latest_recommendation,
             "confidence": row.latest_confidence,
@@ -308,6 +309,7 @@ def _build_monitoring_context() -> dict[str, object]:
             f"{settings.market_open_pm_start}-{settings.market_open_pm_end}"
         ),
         "is_weekday": is_weekday,
+        "timezone": settings.market_timezone,
     }
 
 
@@ -318,6 +320,7 @@ def _resolve_watchlist_status(*, row: object, monitoring_context: dict[str, obje
             "status_label": "未开启",
             "reason": "该标的当前未启用持续监控。",
             "monitoring_now": False,
+            "context_label": "监控开关关闭",
         }
 
     if monitoring_context["market_open"]:
@@ -326,6 +329,7 @@ def _resolve_watchlist_status(*, row: object, monitoring_context: dict[str, obje
             "status_label": "监控中",
             "reason": f"当前处于A股交易时段，系统应持续刷新建议。({monitoring_context['now_label']})",
             "monitoring_now": True,
+            "context_label": f"当前时间 {monitoring_context['now_label']} · {monitoring_context['timezone']}",
         }
 
     if not monitoring_context["is_weekday"]:
@@ -334,6 +338,7 @@ def _resolve_watchlist_status(*, row: object, monitoring_context: dict[str, obje
             "status_label": "非交易日暂停",
             "reason": "当前不是交易日，监控按照默认规则自动暂停。",
             "monitoring_now": False,
+            "context_label": f"当前时间 {monitoring_context['now_label']} · {monitoring_context['timezone']}",
         }
 
     return {
@@ -341,6 +346,7 @@ def _resolve_watchlist_status(*, row: object, monitoring_context: dict[str, obje
         "status_label": "闭市暂停",
         "reason": f"当前不在默认交易时段 {monitoring_context['session_label']} 内，监控自动暂停。",
         "monitoring_now": False,
+        "context_label": f"当前时间 {monitoring_context['now_label']} · {monitoring_context['timezone']}",
     }
 
 
