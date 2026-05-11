@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from statistics import mean
 from zoneinfo import ZoneInfo
@@ -17,7 +18,7 @@ from app.modules.market_data.adapters import normalize_symbol
 from app.modules.market_data.contracts import MarketDataResult
 from app.modules.market_data.errors import MarketDataValidationError
 from app.modules.recommendation_engine import RecommendationBundle, build_default_recommendation_engine_service
-from app.modules.sentiment_ingestion import build_default_sentiment_service
+from app.modules.sentiment_ingestion import build_default_sample_sources, build_default_sentiment_service
 from app.modules.technical_analysis import (
     TechnicalAnalysisValidationError,
     build_default_technical_analysis_service,
@@ -73,6 +74,43 @@ def _recommendation_event_repository() -> RecommendationEventRepository:
 
 def _monitoring_scheduler():
     return current_app.config["TRADER_MONITORING_SCHEDULER"]
+
+
+def _build_sentiment_sources(symbols: list[str] | None = None):
+    sources = build_default_sample_sources()
+    live_symbols = _normalize_sentiment_symbols(symbols)
+    if not live_symbols:
+        return sources
+
+    return [
+        replace(
+            source,
+            parameters={
+                **source.parameters,
+                "symbols": live_symbols,
+            },
+        )
+        if source.adapter_name == "akshare_stock_news_em"
+        else source
+        for source in sources
+    ]
+
+
+def _normalize_sentiment_symbols(symbols: list[str] | None, *, limit: int | None = 8) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for symbol in symbols or []:
+        try:
+            code = normalize_symbol(symbol)
+        except MarketDataValidationError:
+            continue
+        if code in seen:
+            continue
+        seen.add(code)
+        normalized.append(code)
+        if limit is not None and len(normalized) >= limit:
+            break
+    return normalized
 
 
 @bp.get("/")
@@ -435,8 +473,13 @@ def _build_recommendations_workspace() -> dict[str, object]:
 
 
 def _build_sentiment_workspace() -> dict[str, object]:
-    ingestion_result = build_default_sentiment_service().ingest()
+    watchlist_rows = _watchlist_repository().list_rows()
+    watchlist_symbols = [row.symbol for row in watchlist_rows if row.monitoring_enabled]
+    ingestion_result = build_default_sentiment_service().ingest(
+        _build_sentiment_sources(watchlist_symbols)
+    )
     entity_mapping_service = build_default_entity_mapping_service()
+    watchlist_symbol_set = set(_normalize_sentiment_symbols(watchlist_symbols, limit=None))
     company_lookup = {
         entry.company.symbol: entry.company
         for entry in entity_mapping_service.company_dictionary.entries
@@ -446,6 +489,7 @@ def _build_sentiment_workspace() -> dict[str, object]:
     mapped_items: list[dict[str, object]] = []
     company_counter: dict[str, int] = {}
     tag_counter: dict[str, int] = {}
+    watchlist_hits: list[dict[str, object]] = []
     positive_count = 0
     negative_count = 0
     neutral_count = 0
@@ -462,6 +506,18 @@ def _build_sentiment_workspace() -> dict[str, object]:
         matches = entity_mapping_service.map_sentiment_item(item, min_confidence=0.18, max_matches=3)
         for match in matches:
             company_counter[match.company.symbol] = company_counter.get(match.company.symbol, 0) + 1
+            if match.company.symbol in watchlist_symbol_set:
+                watchlist_hits.append(
+                    {
+                        "symbol": match.company.symbol,
+                        "name": match.company.company_name,
+                        "title": item.title,
+                        "source": item.source,
+                        "score": f"{score:+.2f}",
+                        "confidence": f"{match.confidence:.0%}",
+                        "published_at": item.published_at.strftime("%m-%d %H:%M"),
+                    }
+                )
 
         for tag in item.tags:
             tag_counter[tag] = tag_counter.get(tag, 0) + 1
@@ -517,6 +573,9 @@ def _build_sentiment_workspace() -> dict[str, object]:
         "neutral_count": neutral_count,
         "duplicate_count": len(ingestion_result.duplicate_records),
         "stale_count": len(ingestion_result.stale_records),
+        "watchlist_count": len(watchlist_rows),
+        "watchlist_hit_count": len(watchlist_hits),
+        "watchlist_hits": watchlist_hits[:6],
         "latest_published_at": max((item.published_at for item in items), default=None),
         "recent_items": mapped_items[:8],
         "top_companies": top_companies,
@@ -1175,7 +1234,9 @@ def _collect_target_sentiment(
     if company is None:
         return [], []
 
-    sentiment_result = build_default_sentiment_service().ingest()
+    sentiment_result = build_default_sentiment_service().ingest(
+        _build_sentiment_sources([company.symbol])
+    )
     matched_rows: list[dict[str, object]] = []
     for item in sentiment_result.items:
         matches = entity_mapping_service.map_sentiment_item(item, min_confidence=0.18, max_matches=3)

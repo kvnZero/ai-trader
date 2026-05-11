@@ -125,6 +125,81 @@
       </article>
     </section>
 
+    <section class="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-emerald-300/80">Watchlist Hits</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">关注标的舆情命中</h3>
+          </div>
+          <span class="rounded-full border border-emerald-400/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
+            {{ workspace.watchlist_hit_count }} 条
+          </span>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          {% for item in workspace.watchlist_hits %}
+            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-white">{{ item.name }}</p>
+                  <p class="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.symbol }} · {{ item.source }}</p>
+                </div>
+                <span class="rounded-full {% if item.score.startswith('+') %}bg-emerald-300/15 text-emerald-200{% elif item.score.startswith('-') %}bg-rose-300/15 text-rose-200{% else %}bg-slate-300/10 text-slate-200{% endif %} px-3 py-1 text-xs font-medium">
+                  情绪 {{ item.score }}
+                </span>
+              </div>
+              <h4 class="mt-3 text-base font-semibold text-white">{{ item.title }}</h4>
+              <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <span>命中置信度 {{ item.confidence }}</span>
+                <span>时间 {{ item.published_at }}</span>
+              </div>
+            </article>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+              当前没有命中关注标的的舆情。
+            </div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Coverage</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">关注覆盖率概览</h3>
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">关注总数</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ workspace.watchlist_count }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">命中数</p>
+            <p class="mt-2 text-2xl font-semibold text-emerald-200">{{ workspace.watchlist_hit_count }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">命中率</p>
+            <p class="mt-2 text-2xl font-semibold text-white">
+              {% if workspace.total_items > 0 %}
+                {{ "%.0f"|format((workspace.watchlist_hit_count / workspace.total_items) * 100) }}%
+              {% else %}
+                --
+              {% endif %}
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-5 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Top Companies</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            {% for company in workspace.top_companies %}
+              <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ company.name }} · {{ company.count }}</span>
+            {% else %}
+              <span class="text-sm text-slate-400">暂无稳定映射到公司的舆情项。</span>
+            {% endfor %}
+          </div>
+        </div>
+      </article>
+    </section>
+
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
