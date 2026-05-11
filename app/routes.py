@@ -76,6 +76,10 @@ def _monitoring_scheduler():
     return current_app.config["TRADER_MONITORING_SCHEDULER"]
 
 
+def _embedded_monitoring_enabled() -> bool:
+    return bool(current_app.config.get("TRADER_EMBEDDED_MONITORING_ENABLED", False))
+
+
 def _build_sentiment_sources(symbols: list[str] | None = None):
     sources = build_default_sample_sources()
     live_symbols = _normalize_sentiment_symbols(symbols)
@@ -98,6 +102,7 @@ def _build_sentiment_sources(symbols: list[str] | None = None):
 
 def _build_sentiment_source_health_summary() -> dict[str, object]:
     sources = _build_sentiment_sources()
+    checked_at = datetime.now(ZoneInfo(_settings().market_timezone)).strftime("%Y-%m-%d %H:%M")
     try:
         ingestion_result = build_default_sentiment_service().ingest(sources)
     except Exception as exc:
@@ -107,6 +112,7 @@ def _build_sentiment_source_health_summary() -> dict[str, object]:
             "message": f"舆情来源健康检查暂时不可用：{exc}",
             "failed_source_count": 0,
             "total_source_count": len(sources),
+            "checked_at": checked_at,
             "reason_summary": [],
             "failures": [],
         }
@@ -125,6 +131,7 @@ def _build_sentiment_source_health_summary() -> dict[str, object]:
     return _build_sentiment_failure_summary(
         ingestion_result=ingestion_result,
         source_runs=source_runs,
+        checked_at=checked_at,
     )
 
 
@@ -160,6 +167,11 @@ def dashboard() -> str:
     recommendation_events = _build_recommendation_event_history(limit=5)
     event_watch = _build_market_event_watch()
     sentiment_source_health = _build_sentiment_source_health_summary()
+    worker_health = _build_worker_health_summary(
+        sentiment_latest_update=sentiment_source_health.get("checked_at"),
+        sentiment_mode="request",
+        sentiment_status=sentiment_source_health.get("status", "healthy"),
+    )
     recent_scheduled = [item for item in recent_activity if item["status"] == "scheduled"]
     recent_research = [item for item in recent_activity if item["status"] == "research"]
     return render_template(
@@ -173,6 +185,7 @@ def dashboard() -> str:
         recommendation_events=recommendation_events,
         event_watch=event_watch,
         sentiment_source_health=sentiment_source_health,
+        worker_health=worker_health,
         recent_scheduled=recent_scheduled,
         recent_research=recent_research,
         alerts_for_title=alerts,
@@ -214,12 +227,19 @@ def research() -> str:
     workspace = _build_research_workspace(query)
     watchlist_action = _build_research_watchlist_action(workspace)
     event_watch = _build_market_event_watch()
+    worker_health = _build_worker_health_summary(
+        sentiment_latest_update=workspace["sentiment_runtime"]["latest_update"],
+        sentiment_mode=workspace["sentiment_runtime"]["mode"],
+        sentiment_status=workspace["sentiment_runtime"]["status"],
+        research_symbol=workspace["target"]["symbol"],
+    )
     return render_template(
         "research.html",
         query=query,
         workspace=workspace,
         watchlist_action=watchlist_action,
         event_watch=event_watch,
+        worker_health=worker_health,
         navigation=_WEB_NAVIGATION,
         active_nav="core.research",
     )
@@ -238,9 +258,15 @@ def research_add_watchlist_stock() -> str:
 @bp.get("/sentiment")
 def sentiment() -> str:
     workspace = _build_sentiment_workspace()
+    worker_health = _build_worker_health_summary(
+        sentiment_latest_update=workspace["runtime"]["latest_update"],
+        sentiment_mode=workspace["runtime"]["mode"],
+        sentiment_status=workspace["runtime"]["status"],
+    )
     return render_template(
         "sentiment.html",
         workspace=workspace,
+        worker_health=worker_health,
         navigation=_WEB_NAVIGATION,
         active_nav="core.sentiment",
     )
@@ -273,10 +299,15 @@ def system_capabilities() -> str:
         selected_symbol or None,
         limit=selected_limit,
     )
-    monitoring_status = _monitoring_scheduler().status_snapshot()
+    monitoring_status = _safe_monitoring_status_snapshot()
     grouped_activity = _group_activity_by_kind(recent_runs)
     activity_summary = _build_activity_summary(recent_runs)
     quick_symbols = _build_quick_filter_symbols()
+    worker_health = _build_worker_health_summary(
+        sentiment_latest_update=sentiment_source_health.get("checked_at"),
+        sentiment_mode="request",
+        sentiment_status=sentiment_source_health.get("status", "healthy"),
+    )
     return render_template(
         "system.html",
         capabilities=capabilities,
@@ -287,6 +318,7 @@ def system_capabilities() -> str:
         activity_summary=activity_summary,
         monitoring_status=monitoring_status,
         sentiment_source_health=sentiment_source_health,
+        worker_health=worker_health,
         selected_symbol=selected_symbol,
         selected_kind=selected_kind,
         selected_limit=selected_limit,
@@ -462,6 +494,24 @@ def _build_alert_summary_view_model(
     }
 
 
+def _safe_monitoring_status_snapshot() -> dict[str, object]:
+    scheduler = _monitoring_scheduler()
+    if scheduler is None:
+        return {
+            "has_tick": False,
+            "tick_at": None,
+            "market_open": None,
+            "processed_symbols": [],
+            "mode": "external",
+            "label": "外部或未启用",
+        }
+
+    snapshot = scheduler.status_snapshot()
+    snapshot["mode"] = "embedded"
+    snapshot["label"] = "内嵌常驻调度"
+    return snapshot
+
+
 def _build_recent_activity(symbol: str | None = None, *, limit: int = 8) -> list[dict[str, object]]:
     recent_runs = _watchlist_repository().list_recent_analysis_runs(symbol=symbol, limit=limit)
     return [
@@ -508,20 +558,118 @@ def _build_recommendations_workspace() -> dict[str, object]:
     }
 
 
-def _build_sentiment_workspace() -> dict[str, object]:
-    watchlist_rows = _watchlist_repository().list_rows()
-    watchlist_symbols = [row.symbol for row in watchlist_rows if row.monitoring_enabled]
+def _load_sentiment_snapshot(*, symbols: list[str]) -> dict[str, object]:
+    cache_reader = current_app.config.get("TRADER_SENTIMENT_CACHE_READER")
+    checked_at = datetime.now(ZoneInfo(_settings().market_timezone)).strftime("%Y-%m-%d %H:%M")
+    if cache_reader is not None and hasattr(cache_reader, "read_latest"):
+        try:
+            cached_payload = cache_reader.read_latest(symbols=symbols)
+        except TypeError:
+            cached_payload = cache_reader.read_latest()
+        except Exception:
+            cached_payload = None
+        if cached_payload:
+            return {
+                "mode": "persistent",
+                "latest_update": _extract_sentiment_snapshot_timestamp(cached_payload) or checked_at,
+                "status": "healthy",
+                "fallback_used": False,
+                "ingestion_result": cached_payload,
+            }
+
     ingestion_result = build_default_sentiment_service().ingest(
-        _build_sentiment_sources(watchlist_symbols)
+        _build_sentiment_sources(symbols)
     )
+    return {
+        "mode": "request",
+        "latest_update": checked_at,
+        "status": "healthy",
+        "fallback_used": cache_reader is not None,
+        "ingestion_result": ingestion_result,
+    }
+
+
+def _extract_sentiment_snapshot_timestamp(payload: object) -> str | None:
+    if isinstance(payload, dict):
+        for key in ("updated_at", "last_updated_at", "latest_update", "captured_at", "created_at"):
+            value = payload.get(key)
+            if value:
+                return str(value).replace("T", " ")
+    for key in ("updated_at", "last_updated_at", "latest_update", "captured_at", "created_at"):
+        value = getattr(payload, key, None)
+        if value:
+            return str(value).replace("T", " ")
+    return None
+
+
+def _snapshot_items(snapshot_payload: object) -> list[SentimentItem]:
+    if isinstance(snapshot_payload, dict):
+        items = snapshot_payload.get("items")
+        return list(items) if isinstance(items, list) else []
+    return list(getattr(snapshot_payload, "items", []) or [])
+
+
+def _snapshot_source_runs(snapshot_payload: object) -> list[object]:
+    if isinstance(snapshot_payload, dict):
+        runs = snapshot_payload.get("source_runs")
+        return list(runs) if isinstance(runs, list) else []
+    return list(getattr(snapshot_payload, "source_runs", []) or [])
+
+
+def _snapshot_duplicate_records(snapshot_payload: object) -> list[object]:
+    if isinstance(snapshot_payload, dict):
+        records = snapshot_payload.get("duplicate_records")
+        return list(records) if isinstance(records, list) else []
+    return list(getattr(snapshot_payload, "duplicate_records", []) or [])
+
+
+def _snapshot_stale_records(snapshot_payload: object) -> list[object]:
+    if isinstance(snapshot_payload, dict):
+        records = snapshot_payload.get("stale_records")
+        return list(records) if isinstance(records, list) else []
+    return list(getattr(snapshot_payload, "stale_records", []) or [])
+
+
+def _normalize_snapshot_source_run(run: object) -> dict[str, object]:
+    if isinstance(run, dict):
+        metadata = run.get("source_metadata")
+        return {
+            "source": run.get("source") or getattr(metadata, "source_name", None) or "未知来源",
+            "category": run.get("category") or getattr(metadata, "category", None) or "--",
+            "fetched": run.get("fetched") or run.get("fetched_count") or 0,
+            "emitted": run.get("emitted") or run.get("emitted_count") or 0,
+            "duplicate": run.get("duplicate") or run.get("duplicate_count") or 0,
+            "stale": run.get("stale") or run.get("stale_count") or 0,
+        }
+
+    metadata = getattr(run, "source_metadata", None)
+    category = getattr(metadata, "category", None)
+    return {
+        "source": getattr(metadata, "source_name", None) or "未知来源",
+        "category": getattr(category, "value", None) or "--",
+        "fetched": getattr(run, "fetched_count", 0),
+        "emitted": getattr(run, "emitted_count", 0),
+        "duplicate": getattr(run, "duplicate_count", 0),
+        "stale": getattr(run, "stale_count", 0),
+    }
+
+
+def _build_sentiment_workspace_from_snapshot(
+    *,
+    snapshot: dict[str, object],
+    watchlist_rows: list[object],
+) -> dict[str, object]:
+    ingestion_result = snapshot["ingestion_result"]
     entity_mapping_service = build_default_entity_mapping_service()
-    watchlist_symbol_set = set(_normalize_sentiment_symbols(watchlist_symbols, limit=None))
+    watchlist_symbol_set = set(
+        _normalize_sentiment_symbols([row.symbol for row in watchlist_rows if row.monitoring_enabled], limit=None)
+    )
     company_lookup = {
         entry.company.symbol: entry.company
         for entry in entity_mapping_service.company_dictionary.entries
     }
 
-    items = ingestion_result.items
+    items = _snapshot_items(ingestion_result)
     mapped_items: list[dict[str, object]] = []
     company_counter: dict[str, int] = {}
     tag_counter: dict[str, int] = {}
@@ -589,20 +737,11 @@ def _build_sentiment_workspace() -> dict[str, object]:
         key=lambda item: (-item["count"], item["symbol"]),
     )[:4]
     top_tags = sorted(tag_counter.items(), key=lambda item: (-item[1], item[0]))[:6]
-    source_runs = [
-        {
-            "source": run.source_metadata.source_name,
-            "category": run.source_metadata.category.value,
-            "fetched": run.fetched_count,
-            "emitted": run.emitted_count,
-            "duplicate": run.duplicate_count,
-            "stale": run.stale_count,
-        }
-        for run in ingestion_result.source_runs
-    ]
+    source_runs = [_normalize_snapshot_source_run(run) for run in _snapshot_source_runs(ingestion_result)]
     source_failure_summary = _build_sentiment_failure_summary(
         ingestion_result=ingestion_result,
         source_runs=source_runs,
+        checked_at=str(snapshot["latest_update"]),
     )
 
     return {
@@ -611,8 +750,8 @@ def _build_sentiment_workspace() -> dict[str, object]:
         "positive_count": positive_count,
         "negative_count": negative_count,
         "neutral_count": neutral_count,
-        "duplicate_count": len(ingestion_result.duplicate_records),
-        "stale_count": len(ingestion_result.stale_records),
+        "duplicate_count": len(_snapshot_duplicate_records(ingestion_result)),
+        "stale_count": len(_snapshot_stale_records(ingestion_result)),
         "watchlist_count": len(watchlist_rows),
         "watchlist_hit_count": len(watchlist_hits),
         "watchlist_hits": watchlist_hits[:6],
@@ -623,13 +762,27 @@ def _build_sentiment_workspace() -> dict[str, object]:
         "source_runs": source_runs,
         "source_failure_summary": source_failure_summary,
         "source_names": [run["source"] for run in source_runs],
+        "runtime": {
+            "mode": snapshot["mode"],
+            "latest_update": snapshot["latest_update"],
+            "fallback_used": snapshot["fallback_used"],
+            "status": source_failure_summary["status"],
+        },
     }
+
+
+def _build_sentiment_workspace() -> dict[str, object]:
+    watchlist_rows = _watchlist_repository().list_rows()
+    watchlist_symbols = [row.symbol for row in watchlist_rows if row.monitoring_enabled]
+    snapshot = _load_sentiment_snapshot(symbols=watchlist_symbols)
+    return _build_sentiment_workspace_from_snapshot(snapshot=snapshot, watchlist_rows=watchlist_rows)
 
 
 def _build_sentiment_failure_summary(
     *,
     ingestion_result: object,
     source_runs: list[dict[str, object]],
+    checked_at: str | None = None,
 ) -> dict[str, object]:
     raw_failures = list(getattr(ingestion_result, "source_failures", []) or [])
     failures = [_normalize_sentiment_failure(failure) for failure in raw_failures]
@@ -651,6 +804,7 @@ def _build_sentiment_failure_summary(
             "message": "全部来源运行正常，未发现失败项。",
             "failed_source_count": 0,
             "total_source_count": len(source_runs),
+            "checked_at": checked_at,
             "reason_summary": [],
             "failures": [],
         }
@@ -661,6 +815,7 @@ def _build_sentiment_failure_summary(
         "message": f"{len(failed_sources) or len(failures)} 个来源失败，需检查抓取或解析链路。",
         "failed_source_count": len(failed_sources) or len(failures),
         "total_source_count": len(source_runs),
+        "checked_at": checked_at,
         "reason_summary": reason_summary[:3],
         "failures": failures[:3],
     }
@@ -1038,6 +1193,12 @@ def _build_research_workspace(query: str) -> dict[str, object]:
         "recent_activity": _empty_research_recent_activity_summary(),
         "recommendation_events": [],
         "sentiment_source_health": None,
+        "sentiment_runtime": {
+            "mode": "idle",
+            "latest_update": None,
+            "fallback_used": False,
+            "status": "idle",
+        },
         "errors": list(target["issues"]),
     }
 
@@ -1104,6 +1265,12 @@ def _build_research_workspace(query: str) -> dict[str, object]:
             workspace["sentiment_source_health"] = sentiment_source_health
             workspace["sentiment"] = _build_sentiment_summary(matched_sentiment)
             workspace["mapping"] = _build_mapping_summary(matched_sentiment)
+            workspace["sentiment_runtime"] = {
+                "mode": sentiment_source_health.get("mode", "request"),
+                "latest_update": sentiment_source_health.get("checked_at"),
+                "fallback_used": bool(sentiment_source_health.get("fallback_used")),
+                "status": sentiment_source_health.get("status", "healthy"),
+            }
 
     technical_signals = (
         list(technical_analysis_result.signals)
@@ -1378,30 +1545,68 @@ def _collect_target_sentiment(
             "failures": [],
         }
 
-    sentiment_result = build_default_sentiment_service().ingest(_build_sentiment_sources([company.symbol]))
-    source_runs = [
-        {
-            "source": run.source_metadata.source_name,
-            "category": run.source_metadata.category.value,
-            "fetched": run.fetched_count,
-            "emitted": run.emitted_count,
-            "duplicate": run.duplicate_count,
-            "stale": run.stale_count,
-        }
-        for run in sentiment_result.source_runs
-    ]
+    snapshot = _load_sentiment_snapshot(symbols=[company.symbol])
+    sentiment_result = snapshot["ingestion_result"]
+    source_runs = [_normalize_snapshot_source_run(run) for run in _snapshot_source_runs(sentiment_result)]
     source_failure_summary = _build_sentiment_failure_summary(
         ingestion_result=sentiment_result,
         source_runs=source_runs,
+        checked_at=str(snapshot["latest_update"]),
     )
+    source_failure_summary["mode"] = str(snapshot["mode"])
+    source_failure_summary["fallback_used"] = bool(snapshot["fallback_used"])
     matched_rows: list[dict[str, object]] = []
-    for item in sentiment_result.items:
+    for item in _snapshot_items(sentiment_result):
         matches = entity_mapping_service.map_sentiment_item(item, min_confidence=0.18, max_matches=3)
         for match in matches:
             if match.company.symbol == company.symbol:
                 matched_rows.append({"item": item, "match": match})
                 break
     return [row["item"] for row in matched_rows], matched_rows, source_failure_summary
+
+
+def _build_worker_health_summary(
+    *,
+    sentiment_latest_update: str | None,
+    sentiment_mode: str,
+    sentiment_status: str,
+    research_symbol: str | None = None,
+) -> dict[str, object]:
+    monitoring_status = _safe_monitoring_status_snapshot()
+    recent_activity = (
+        _build_recent_activity(research_symbol, limit=1)
+        if research_symbol
+        else _build_recent_activity(limit=1)
+    )
+    latest_analysis = recent_activity[0]["created_at"] if recent_activity else None
+    sentiment_label = {
+        "persistent": "持久化快照",
+        "request": "请求时计算",
+        "idle": "待触发",
+    }.get(sentiment_mode, sentiment_mode)
+    return {
+        "monitoring": {
+            "label": "监控调度",
+            "mode": monitoring_status["label"],
+            "latest_update": monitoring_status["tick_at"],
+            "status": "healthy" if monitoring_status["mode"] == "embedded" else "passive",
+            "description": "关注列表自动刷新由常驻调度器驱动；未内嵌时由外部进程或手动触发。",
+        },
+        "sentiment": {
+            "label": "舆情聚合",
+            "mode": sentiment_label,
+            "latest_update": sentiment_latest_update,
+            "status": sentiment_status,
+            "description": "优先读取持久化结果；不可用时回退到页面请求阶段的实时采集。",
+        },
+        "research": {
+            "label": "研究计算",
+            "mode": "请求时计算",
+            "latest_update": latest_analysis,
+            "status": "healthy" if latest_analysis else "passive",
+            "description": "行情、技术分析与推荐链路在访问研究页时计算，最近研究动作会写入历史。",
+        },
+    }
 
 
 def _build_sentiment_summary(matched_sentiment: list[dict[str, object]]) -> dict[str, object]:
