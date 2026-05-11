@@ -2,7 +2,7 @@ from flask import Flask
 
 from app.config import get_settings
 from app.monitoring import MarketHoursMonitoringScheduler, WatchlistRefreshService
-from app.persistence import AlertRepository, WatchlistRepository, init_database
+from app.persistence import AlertRepository, RecommendationEventRepository, WatchlistRepository, init_database
 from app.routes import bp as core_blueprint
 
 def create_app() -> Flask:
@@ -11,10 +11,12 @@ def create_app() -> Flask:
     database = init_database(settings.database_path)
     watchlist_repository = WatchlistRepository(database)
     alert_repository = AlertRepository(database)
+    recommendation_event_repository = RecommendationEventRepository(database)
     refresh_service = WatchlistRefreshService(
         settings=settings,
         watchlist_repository=watchlist_repository,
         alert_repository=alert_repository,
+        recommendation_event_repository=recommendation_event_repository,
     )
 
     watchlist_repository.seed_defaults()
@@ -27,6 +29,7 @@ def create_app() -> Flask:
     app.config["TRADER_DATABASE"] = database
     app.config["TRADER_WATCHLIST_REPOSITORY"] = watchlist_repository
     app.config["TRADER_ALERT_REPOSITORY"] = alert_repository
+    app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = recommendation_event_repository
     app.config["TRADER_WATCHLIST_REFRESH_SERVICE"] = refresh_service
     app.config["TRADER_MONITORING_SCHEDULER"] = scheduler
     app.register_blueprint(core_blueprint)

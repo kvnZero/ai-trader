@@ -8,6 +8,7 @@ from app.config import Settings
 from app.modules.market_data import build_default_market_data_service
 from app.modules.technical_analysis import build_default_technical_analysis_service
 from app.persistence.alerts import AlertRepository
+from app.persistence.recommendation_events import RecommendationEventRepository
 from app.persistence.watchlist import WatchlistRepository, WatchlistRow
 
 
@@ -34,10 +35,12 @@ class WatchlistRefreshService:
         settings: Settings,
         watchlist_repository: WatchlistRepository,
         alert_repository: AlertRepository,
+        recommendation_event_repository: RecommendationEventRepository,
     ):
         self.settings = settings
         self.watchlist_repository = watchlist_repository
         self.alert_repository = alert_repository
+        self.recommendation_event_repository = recommendation_event_repository
         self.market_service = build_default_market_data_service()
         self.technical_service = build_default_technical_analysis_service()
         self._last_refresh_at: dict[str, datetime] = {}
@@ -168,6 +171,13 @@ class WatchlistRefreshService:
             detail=outcome.reason,
         )
         if outcome.recommendation != previous_recommendation:
+            self.recommendation_event_repository.create_event(
+                symbol=row.symbol,
+                previous_action=previous_recommendation,
+                current_action=outcome.recommendation,
+                confidence=outcome.confidence,
+                summary=outcome.reason,
+            )
             self.alert_repository.create_alert(
                 symbol=row.symbol,
                 title=f"{row.name}建议从 {previous_recommendation.upper()} 调整为 {outcome.recommendation.upper()}",
