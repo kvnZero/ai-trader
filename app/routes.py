@@ -390,12 +390,25 @@ def _build_recommendations_workspace() -> dict[str, object]:
     alerts, alert_summary = _build_alert_view_models()
     recommendation_events = _build_recommendation_event_history(limit=6)
     recent_activity = _build_recent_activity(limit=6)
+    no_trade_queue = [
+        row
+        for row in watchlist_rows
+        if row.latest_recommendation in {"watch", "avoid"} or row.latest_confidence < 0.4
+    ]
+    action_counts = {
+        "buy": len([row for row in watchlist_rows if row.latest_recommendation == "buy"]),
+        "sell": len([row for row in watchlist_rows if row.latest_recommendation == "sell"]),
+        "watch": len([row for row in watchlist_rows if row.latest_recommendation == "watch"]),
+        "avoid": len([row for row in watchlist_rows if row.latest_recommendation == "avoid"]),
+    }
     return {
         "watchlist_count": len(watchlist_rows),
         "enabled_count": len([row for row in watchlist_rows if row.monitoring_enabled]),
         "high_alert_count": alert_summary["high_count"],
         "recommendation_event_count": len(recommendation_events),
         "recent_activity_count": len(recent_activity),
+        "action_counts": action_counts,
+        "no_trade_queue": no_trade_queue,
         "top_watchlist": watchlist_rows[:4],
         "top_alert": alert_summary["top_alert"],
         "recent_recommendation_events": recommendation_events,

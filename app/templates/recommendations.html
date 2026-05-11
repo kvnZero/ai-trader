@@ -39,55 +39,69 @@
       <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
         <div class="flex items-center justify-between gap-4">
           <div>
-            <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Latest Alert</p>
-            <h3 class="mt-2 text-2xl font-semibold text-white">最近未读提醒</h3>
+            <p class="text-xs uppercase tracking-[0.22em] text-slate-500">No-Trade Queue</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">观望 / 不交易队列</h3>
           </div>
-          <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium text-rose-200">
-            {{ workspace.alerts|length }} 条
+          <span class="rounded-full border border-amber-400/30 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-200">
+            {{ workspace.no_trade_queue|length }} 条
           </span>
         </div>
 
-        {% if workspace.top_alert %}
-          <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
-            <div class="flex items-center justify-between gap-4">
-              <div>
-                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ workspace.top_alert.symbol }}</p>
-                <h4 class="mt-2 text-lg font-semibold text-white">{{ workspace.top_alert.title }}</h4>
-              </div>
-              <span class="text-xs text-slate-500">{{ workspace.top_alert.time }}</span>
-            </div>
-            <p class="mt-3 text-sm leading-7 text-slate-300">{{ workspace.top_alert.summary }}</p>
-          </div>
-        {% else %}
-          <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
-            当前没有未读提醒。
-          </div>
-        {% endif %}
-
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-          {% for item in workspace.recent_activity[:4] %}
-            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+        <div class="mt-4 grid gap-3">
+          {% for item in workspace.no_trade_queue %}
+            <article class="rounded-3xl border border-amber-400/20 bg-amber-300/5 p-4">
               <div class="flex items-center justify-between gap-4">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs uppercase tracking-[0.16em] text-slate-300">{{ item.status }}</span>
-                  <span class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.symbol }}</span>
+                <div>
+                  <p class="text-sm font-semibold text-white">{{ item.name }}</p>
+                  <p class="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.symbol }}</p>
                 </div>
-                <span class="text-xs text-slate-500">{{ item.created_at }}</span>
+                <div class="text-right">
+                  <span class="rounded-full bg-amber-300/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-200">
+                    {{ item.latest_recommendation | upper }}
+                  </span>
+                  <p class="mt-2 text-xs text-slate-500">置信度 {{ "%.0f"|format(item.latest_confidence * 100) }}%</p>
+                </div>
               </div>
-              <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.detail }}</p>
+              <p class="mt-3 text-sm leading-7 text-amber-50/90">{{ item.latest_reason }}</p>
             </article>
           {% else %}
             <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
-              暂无最近活动。
+              当前没有需要观望的标的。
             </div>
           {% endfor %}
         </div>
       </article>
 
       <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
-        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Recommendation Events</p>
-        <h3 class="mt-2 text-2xl font-semibold text-white">最近建议变化</h3>
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Action Mix</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">建议分布</h3>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Buy / Sell</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ workspace.action_counts.buy }} / {{ workspace.action_counts.sell }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Watch / Avoid</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ workspace.action_counts.watch }} / {{ workspace.action_counts.avoid }}</p>
+          </div>
+        </div>
 
+        <div class="mt-5 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Latest Alert</p>
+          {% if workspace.top_alert %}
+            <h4 class="mt-2 text-base font-semibold text-white">{{ workspace.top_alert.title }}</h4>
+            <p class="mt-2 text-sm leading-7 text-slate-300">{{ workspace.top_alert.summary }}</p>
+          {% else %}
+            <p class="mt-2 text-sm leading-7 text-slate-400">当前没有未读提醒。</p>
+          {% endif %}
+        </div>
+      </article>
+    </section>
+
+    <section class="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Recent Recommendation Events</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">最近建议变化</h3>
         <div class="mt-4 space-y-3">
           {% for event in workspace.recent_recommendation_events %}
             <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
@@ -110,42 +124,34 @@
           {% endfor %}
         </div>
       </article>
-    </section>
 
-    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
-      <div class="flex items-center justify-between gap-4">
-        <div>
-          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Watchlist</p>
-          <h3 class="mt-2 text-2xl font-semibold text-white">当前监控标的</h3>
-        </div>
-        <span class="rounded-full border border-emerald-400/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
-          {{ workspace.top_watchlist|length }} 条
-        </span>
-      </div>
-
-      <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {% for item in workspace.top_watchlist %}
-          <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
-            <div class="flex items-center justify-between gap-4">
-              <div>
-                <h4 class="text-sm font-semibold text-white">{{ item.name }}</h4>
-                <p class="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.symbol }}</p>
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Current Watchlist</p>
+        <h3 class="mt-2 text-2xl font-semibold text-white">当前监控标的</h3>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          {% for item in workspace.top_watchlist %}
+            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h4 class="text-sm font-semibold text-white">{{ item.name }}</h4>
+                  <p class="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.symbol }}</p>
+                </div>
+                {% if item.monitoring_enabled %}
+                  <span class="rounded-full bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">On</span>
+                {% else %}
+                  <span class="rounded-full bg-slate-300/10 px-3 py-1 text-xs font-medium text-slate-300">Off</span>
+                {% endif %}
               </div>
-              {% if item.monitoring_enabled %}
-                <span class="rounded-full bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">On</span>
-              {% else %}
-                <span class="rounded-full bg-slate-300/10 px-3 py-1 text-xs font-medium text-slate-300">Off</span>
-              {% endif %}
+              <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.latest_reason }}</p>
+              <p class="mt-3 text-xs text-slate-500">建议：{{ item.latest_recommendation | upper }} · 置信度 {{ "%.0f"|format(item.latest_confidence * 100) }}%</p>
+            </article>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+              当前没有监控标的。
             </div>
-            <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.latest_reason }}</p>
-            <p class="mt-3 text-xs text-slate-500">建议：{{ item.latest_recommendation | upper }} · 置信度 {{ "%.0f"|format(item.latest_confidence * 100) }}%</p>
-          </article>
-        {% else %}
-          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
-            当前没有监控标的。
-          </div>
-        {% endfor %}
-      </div>
+          {% endfor %}
+        </div>
+      </article>
     </section>
   </section>
 {% endblock %}
