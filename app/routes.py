@@ -120,13 +120,24 @@ def refresh_watchlist_stock(symbol: str) -> str:
 def research() -> str:
     query = request.args.get("query", "").strip()
     workspace = _build_research_workspace(query)
+    watchlist_action = _build_research_watchlist_action(workspace)
     return render_template(
         "research.html",
         query=query,
         workspace=workspace,
+        watchlist_action=watchlist_action,
         navigation=_WEB_NAVIGATION,
         active_nav="core.research",
     )
+
+
+@bp.post("/research/watchlist")
+def research_add_watchlist_stock() -> str:
+    symbol = request.form.get("symbol", "").strip()
+    name = request.form.get("name", "").strip()
+    if symbol and name:
+        _watchlist_repository().create_stock(symbol, name)
+    return redirect(url_for("core.research", query=symbol or name))
 
 
 @bp.get("/sentiment")
@@ -300,6 +311,26 @@ def _build_alert_view_models() -> list[dict[str, object]]:
         }
         for row in rows
     ]
+
+
+def _build_research_watchlist_action(workspace: dict[str, object]) -> dict[str, object]:
+    target = workspace["target"]
+    company = target["company"]
+    symbol = target["symbol"]
+    if company is None or symbol is None:
+        return {
+            "available": False,
+            "symbol": None,
+            "name": None,
+            "reason": "解析出股票后可一键加入关注列表并开始监控。",
+        }
+
+    return {
+        "available": True,
+        "symbol": symbol,
+        "name": company.company_name,
+        "reason": "可将当前研究标的加入监控列表，并沿用默认交易时段自动刷新建议。",
+    }
 
 
 def _refresh_watchlist_item(symbol: str) -> bool:

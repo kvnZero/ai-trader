@@ -31,6 +31,32 @@
       </div>
     </header>
 
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Watchlist Bridge</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">加入关注并开始监控</h3>
+          <p class="mt-3 text-sm leading-7 text-slate-300">{{ watchlist_action.reason }}</p>
+        </div>
+        {% if watchlist_action.available %}
+          <form action="{{ url_for('core.research_add_watchlist_stock') }}" method="post" class="flex flex-col gap-3 rounded-[1.75rem] border border-slate-800/80 bg-slate-950/60 p-4 sm:flex-row sm:items-end">
+            <input type="hidden" name="symbol" value="{{ watchlist_action.symbol }}" />
+            <input type="hidden" name="name" value="{{ watchlist_action.name }}" />
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-slate-300">
+              {{ watchlist_action.name }} ({{ watchlist_action.symbol }})
+            </div>
+            <button type="submit" class="rounded-2xl border border-emerald-400/30 bg-emerald-300/10 px-5 py-3 text-sm font-medium text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-300/15">
+              一键加入关注
+            </button>
+          </form>
+        {% else %}
+          <div class="rounded-[1.75rem] border border-slate-800/80 bg-slate-950/60 px-4 py-3 text-sm text-slate-400">
+            解析出股票后，这里会提供一键加入关注按钮。
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
     {% if workspace.errors %}
       <section class="rounded-[2rem] border border-amber-400/20 bg-amber-300/5 p-5">
         <div class="flex items-start gap-4">
