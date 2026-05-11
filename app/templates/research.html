@@ -5,29 +5,310 @@
 {% block body %}
   <section class="space-y-6">
     <header class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
-      <p class="text-xs uppercase tracking-[0.24em] text-sky-300/80">Research Workspace</p>
-      <h2 class="mt-3 text-4xl font-semibold tracking-tight text-white">个股研究页</h2>
-      <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
-        这是后续最核心的工作区。下一步会把股票搜索、行情摘要、技术信号、舆情映射和最终建议逐块接入。
-      </p>
+      <div class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-[0.24em] text-sky-300/80">Research Workspace</p>
+          <h2 class="mt-3 text-4xl font-semibold tracking-tight text-white">个股研究工作台</h2>
+          <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-300">
+            这里把行情、技术分析、舆情映射和最终建议放到同一张研究画布里。当前版本优先保证工作流完整、证据链清晰、异常状态可见。
+          </p>
+        </div>
+
+        <form action="{{ url_for('core.research') }}" method="get" class="grid gap-3 rounded-[1.75rem] border border-slate-800/80 bg-slate-950/60 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end xl:min-w-[430px]">
+          <label class="block">
+            <span class="text-xs uppercase tracking-[0.18em] text-slate-500">股票代码 / 名称</span>
+            <input
+              name="query"
+              value="{{ query }}"
+              placeholder="例如 600519 或 贵州茅台"
+              class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40"
+            />
+          </label>
+          <button type="submit" class="rounded-2xl border border-sky-400/30 bg-sky-300/10 px-5 py-3 text-sm font-medium text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-300/15">
+            开始研究
+          </button>
+        </form>
+      </div>
     </header>
 
-    <div class="grid gap-4 xl:grid-cols-2">
+    {% if workspace.errors %}
+      <section class="rounded-[2rem] border border-amber-400/20 bg-amber-300/5 p-5">
+        <div class="flex items-start gap-4">
+          <div class="mt-1 h-2.5 w-2.5 rounded-full bg-amber-300"></div>
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-amber-200/80">Research Warnings</p>
+            <ul class="mt-3 space-y-2 text-sm leading-7 text-amber-50/90">
+              {% for item in workspace.errors %}
+                <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
       <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
-        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Planned Panels</p>
-        <ul class="mt-4 space-y-3 text-sm leading-7 text-slate-300">
-          <li>行情摘要卡片</li>
-          <li>技术分析卡片</li>
-          <li>舆情影响卡片</li>
-          <li>最终建议卡片</li>
-        </ul>
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Market Snapshot</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">{{ workspace.market.display_name }}</h3>
+            <div class="mt-3 flex flex-wrap gap-3 text-sm text-slate-300">
+              {% if workspace.market.symbol %}
+                <span class="rounded-full border border-slate-800/80 bg-slate-950/60 px-3 py-1">{{ workspace.market.symbol }}</span>
+              {% endif %}
+              <span class="rounded-full border border-slate-800/80 bg-slate-950/60 px-3 py-1">{{ workspace.market.exchange }}</span>
+              <span class="rounded-full border border-slate-800/80 bg-slate-950/60 px-3 py-1">{{ workspace.market.industry }}</span>
+            </div>
+          </div>
+          {% if workspace.market.status == "ready" %}
+            <div class="rounded-[1.75rem] border border-slate-800/80 bg-slate-950/60 px-5 py-4">
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Latest Price</p>
+              <p class="mt-2 text-3xl font-semibold text-white">{{ workspace.market.last_price }}</p>
+              {% if workspace.market.change_percent %}
+                <p class="mt-2 text-sm {% if workspace.market.change_percent.startswith('+') %}text-emerald-200{% elif workspace.market.change_percent.startswith('-') %}text-rose-200{% else %}text-slate-300{% endif %}">
+                  {{ workspace.market.change_percent }}
+                </p>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+
+        {% if workspace.market.message %}
+          <p class="mt-4 text-sm leading-7 text-slate-300">{{ workspace.market.message }}</p>
+        {% endif %}
+
+        <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">更新时间</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.market.captured_at or "--" }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">成交量</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.market.volume or "--" }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">成交额</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.market.turnover or "--" }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">主题标签</p>
+            <p class="mt-2 text-sm font-medium text-white">
+              {% if workspace.market.themes %}
+                {{ workspace.market.themes | join(" / ") }}
+              {% else %}
+                --
+              {% endif %}
+            </p>
+          </div>
+        </div>
       </article>
+
       <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
-        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Derived Requirements</p>
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Final Recommendation</p>
+        <div class="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div class="flex items-center gap-3">
+              <span class="rounded-full {% if workspace.recommendation.action == 'buy' %}bg-emerald-300/15 text-emerald-200{% elif workspace.recommendation.action == 'sell' %}bg-rose-300/15 text-rose-200{% elif workspace.recommendation.action == 'avoid' %}bg-amber-300/15 text-amber-200{% else %}bg-slate-300/10 text-slate-200{% endif %} px-4 py-2 text-sm font-semibold uppercase tracking-[0.18em]">
+                {{ workspace.recommendation.action_label or "等待研究" }}
+              </span>
+              {% if workspace.recommendation.confidence %}
+                <span class="text-sm text-slate-300">置信度 {{ workspace.recommendation.confidence }}</span>
+              {% endif %}
+            </div>
+            <p class="mt-4 text-sm leading-7 text-slate-300">{{ workspace.recommendation.summary or workspace.recommendation.message or "输入标的后，这里会展示最终建议和建议依据。" }}</p>
+          </div>
+          <div class="rounded-[1.75rem] border border-slate-800/80 bg-slate-950/60 px-5 py-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Decision Score</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ workspace.recommendation.decision_score or "--" }}</p>
+            <p class="mt-2 text-xs text-slate-500">{{ workspace.recommendation.generated_at or "尚未生成" }}</p>
+          </div>
+        </div>
+
+        <div class="mt-5 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">技术信号数</p>
+            <p class="mt-2 text-lg font-semibold text-white">{{ workspace.recommendation.technical_signal_count }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">关联舆情数</p>
+            <p class="mt-2 text-lg font-semibold text-white">{{ workspace.recommendation.sentiment_count }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Agent 置信度</p>
+            <p class="mt-2 text-lg font-semibold text-white">{{ workspace.recommendation.agent_confidence or "--" }}</p>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid gap-4 xl:grid-cols-2">
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Technical Analysis</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">{{ workspace.technical.trend_label }}</h3>
+          </div>
+          <div class="text-right text-sm text-slate-300">
+            <p>多头 {{ workspace.technical.bullish_score or "--" }}</p>
+            <p class="mt-1">空头 {{ workspace.technical.bearish_score or "--" }}</p>
+          </div>
+        </div>
+
+        <p class="mt-4 text-sm leading-7 text-slate-300">{{ workspace.technical.message or "技术分析基于最近K线、均线结构、动量和量价关系生成。" }}</p>
+
+        <div class="mt-5 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">SMA20</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.technical.sma_20 or "--" }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">SMA60</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.technical.sma_60 or "--" }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">5日量比</p>
+            <p class="mt-2 text-sm font-medium text-white">{{ workspace.technical.volume_ratio_5d or "--" }}</p>
+          </div>
+        </div>
+
+        <div class="mt-5 space-y-3">
+          {% for signal in workspace.technical.signals[:4] %}
+            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <h4 class="text-sm font-semibold text-white">{{ signal.name }}</h4>
+                <span class="text-xs uppercase tracking-[0.16em] {% if signal.direction == 'bullish' %}text-emerald-200{% elif signal.direction == 'bearish' %}text-rose-200{% else %}text-slate-300{% endif %}">
+                  {{ signal.direction_label }} / {{ signal.score }}
+                </span>
+              </div>
+              <p class="mt-2 text-sm leading-7 text-slate-300">{{ signal.summary }}</p>
+              {% if signal.evidence %}
+                <ul class="mt-2 space-y-1 text-xs text-slate-400">
+                  {% for evidence in signal.evidence %}
+                    <li>{{ evidence }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Sentiment & Mapping</p>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">关联舆情数</p>
+            <p class="mt-2 text-lg font-semibold text-white">{{ workspace.sentiment.mapped_count }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">平均映射置信度</p>
+            <p class="mt-2 text-lg font-semibold text-white">{{ workspace.mapping.average_confidence or "--" }}</p>
+          </div>
+        </div>
+
         <p class="mt-4 text-sm leading-7 text-slate-300">
-          除了行情和建议，研究页还会逐步增加数据新鲜度、证据展开、观察列表和研究记录这些更接近真实投研工作流的能力。
+          {{ workspace.sentiment.message or workspace.mapping.message or "舆情与实体映射结果会帮助区分题材噪音与真正映射到公司的信息。" }}
         </p>
+
+        <div class="mt-5 space-y-3">
+          {% for item in workspace.sentiment.item_rows %}
+            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <span class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ item.source }}</span>
+                <span class="text-xs text-slate-500">{{ item.published_at }}</span>
+              </div>
+              <h4 class="mt-2 text-sm font-semibold text-white">{{ item.title }}</h4>
+              <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-slate-300">情绪 {{ item.score }}</span>
+                {% for tag in item.tags %}
+                  <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-slate-400">{{ tag }}</span>
+                {% endfor %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+
+        {% if workspace.mapping.top_evidence %}
+          <div class="mt-5 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">实体映射证据</p>
+            <ul class="mt-3 space-y-2 text-sm leading-7 text-slate-300">
+              {% for evidence in workspace.mapping.top_evidence %}
+                <li>{{ evidence }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
       </article>
-    </div>
+    </section>
+
+    <section class="grid gap-4 xl:grid-cols-2">
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Agent Thesis</p>
+        <h3 class="mt-3 text-2xl font-semibold text-white">交易员解释</h3>
+        <p class="mt-4 text-sm leading-7 text-slate-300">{{ workspace.recommendation.agent_thesis or "等待生成交易员解释。" }}</p>
+
+        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">触发条件</p>
+            <ul class="mt-3 space-y-2 text-sm leading-7 text-slate-300">
+              {% for item in workspace.recommendation.trigger_conditions %}
+                <li>{{ item }}</li>
+              {% else %}
+                <li>暂无</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">失效条件</p>
+            <ul class="mt-3 space-y-2 text-sm leading-7 text-slate-300">
+              {% for item in workspace.recommendation.invalidation_conditions %}
+                <li>{{ item }}</li>
+              {% else %}
+                <li>暂无</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </article>
+
+      <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Risk & Conflicts</p>
+        <h3 class="mt-3 text-2xl font-semibold text-white">风险与分歧</h3>
+
+        <div class="mt-4 grid gap-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">决策证据</p>
+            <ul class="mt-3 space-y-2 text-sm leading-7 text-slate-300">
+              {% for item in workspace.recommendation.evidence %}
+                <li>{{ item }}</li>
+              {% else %}
+                <li>暂无证据摘要。</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">冲突信号</p>
+            <ul class="mt-3 space-y-2 text-sm leading-7 text-slate-300">
+              {% for item in workspace.recommendation.conflicts %}
+                <li>{{ item }}</li>
+              {% else %}
+                <li>当前没有显著冲突信号。</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">风险提示</p>
+            <ul class="mt-3 space-y-2 text-sm leading-7 text-slate-300">
+              {% for item in workspace.recommendation.risk_notes %}
+                <li>{{ item }}</li>
+              {% else %}
+                <li>当前没有额外风险说明。</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </article>
+    </section>
   </section>
 {% endblock %}
