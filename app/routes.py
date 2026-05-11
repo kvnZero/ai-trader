@@ -262,6 +262,7 @@ def recommendations() -> str:
 def system_capabilities() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
+    sentiment_source_health = _build_sentiment_source_health_summary()
     selected_symbol = request.args.get("symbol", "").strip()
     selected_kind = request.args.get("kind", "").strip()
     selected_limit = _get_positive_int_arg("limit", default=8)
@@ -285,6 +286,7 @@ def system_capabilities() -> str:
         grouped_activity=grouped_activity,
         activity_summary=activity_summary,
         monitoring_status=monitoring_status,
+        sentiment_source_health=sentiment_source_health,
         selected_symbol=selected_symbol,
         selected_kind=selected_kind,
         selected_limit=selected_limit,

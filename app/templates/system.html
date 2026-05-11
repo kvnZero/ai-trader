@@ -32,6 +32,36 @@
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Sentiment Source Health</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">舆情来源健康概览</h3>
+        </div>
+        <span class="rounded-full px-3 py-1 text-xs font-medium {% if sentiment_source_health.status == 'healthy' %}border border-emerald-400/30 bg-emerald-300/10 text-emerald-200{% elif sentiment_source_health.status == 'degraded' %}border border-amber-400/30 bg-amber-300/10 text-amber-200{% else %}border border-rose-400/30 bg-rose-300/10 text-rose-200{% endif %}">
+          {{ sentiment_source_health.label }}
+        </span>
+      </div>
+
+      <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+        <div class="flex flex-wrap items-center gap-3 text-sm text-slate-300">
+          <span>失败来源 {{ sentiment_source_health.failed_source_count }} / {{ sentiment_source_health.total_source_count }}</span>
+          <span class="text-slate-600">|</span>
+          <span>{{ sentiment_source_health.message }}</span>
+        </div>
+
+        {% if sentiment_source_health.reason_summary %}
+          <div class="mt-3 flex flex-wrap gap-2">
+            {% for reason in sentiment_source_health.reason_summary %}
+              <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ reason }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="mt-3 text-sm text-slate-400">全部来源运行正常。</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
           <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Monitoring Scheduler</p>
           <h3 class="mt-2 text-2xl font-semibold text-white">最近一次自动调度</h3>
         </div>
