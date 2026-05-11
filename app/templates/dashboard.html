@@ -197,47 +197,40 @@
           </span>
         </div>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-3">
-          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
-            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Total</p>
-            <p class="mt-2 text-2xl font-semibold text-white">{{ alert_summary.total }}</p>
-          </div>
-          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
-            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">High</p>
-            <p class="mt-2 text-2xl font-semibold text-rose-200">{{ alert_summary.high_count }}</p>
-          </div>
-          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
-            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Medium / Other</p>
-            <p class="mt-2 text-2xl font-semibold text-amber-200">{{ alert_summary.medium_count }} / {{ alert_summary.other_count }}</p>
-          </div>
-        </div>
-
         <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Latest Unread</p>
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0">
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Alert Summary</p>
               {% if alert_summary.top_alert %}
-                <h4 class="mt-2 text-base font-semibold text-white">{{ alert_summary.top_alert.title }}</h4>
+                <div class="mt-2 flex items-center gap-3">
+                  <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-200">
+                    {{ alert_summary.top_alert.symbol }}
+                  </span>
+                  <span class="text-xs text-slate-500">{{ alert_summary.top_alert.time }}</span>
+                </div>
+                <h4 class="mt-3 text-base font-semibold text-white">{{ alert_summary.top_alert.title }}</h4>
+                <p class="mt-2 text-sm leading-7 text-slate-300">{{ alert_summary.top_alert.summary }}</p>
               {% else %}
                 <h4 class="mt-2 text-base font-semibold text-white">当前没有未读提醒</h4>
+                <p class="mt-2 text-sm leading-7 text-slate-300">当有新提醒时，这里会优先展示最近一条未读消息。</p>
               {% endif %}
             </div>
-            {% if alert_summary.top_alert %}
-              <div class="text-right">
-                <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-200">
-                  {{ alert_summary.top_alert.symbol }}
-                </span>
-                <p class="mt-2 text-xs text-slate-500">{{ alert_summary.top_alert.time }}</p>
+
+            <div class="grid grid-cols-3 gap-3 sm:min-w-[280px]">
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3">
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Total</p>
+                <p class="mt-2 text-xl font-semibold text-white">{{ alert_summary.total }}</p>
               </div>
-            {% endif %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3">
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">High</p>
+                <p class="mt-2 text-xl font-semibold text-rose-200">{{ alert_summary.high_count }}</p>
+              </div>
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 px-4 py-3">
+                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Med / Other</p>
+                <p class="mt-2 text-xl font-semibold text-amber-200">{{ alert_summary.medium_count }} / {{ alert_summary.other_count }}</p>
+              </div>
+            </div>
           </div>
-          <p class="mt-3 text-sm leading-7 text-slate-300">
-            {% if alert_summary.top_alert %}
-              {{ alert_summary.top_alert.summary }}
-            {% else %}
-              当有新提醒时，这里会优先展示最近一条未读消息。
-            {% endif %}
-          </p>
         </div>
 
         <div class="mt-4 space-y-3">
