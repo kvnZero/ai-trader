@@ -119,6 +119,13 @@
         {% endfor %}
       </div>
 
+      <div class="mt-3 flex flex-wrap gap-2">
+        <a href="{{ url_for('core.system_capabilities', symbol=selected_symbol, limit=selected_limit) }}" class="rounded-full border border-slate-800/80 bg-slate-950/60 px-3 py-1 text-xs {% if not selected_kind %}text-slate-100{% else %}text-slate-300{% endif %}">全部动作</a>
+        <a href="{{ url_for('core.system_capabilities', symbol=selected_symbol, limit=selected_limit, kind='scheduled') }}" class="rounded-full border border-slate-800/80 bg-slate-950/60 px-3 py-1 text-xs {% if selected_kind == 'scheduled' %}text-slate-100{% else %}text-slate-300{% endif %}">自动刷新</a>
+        <a href="{{ url_for('core.system_capabilities', symbol=selected_symbol, limit=selected_limit, kind='research') }}" class="rounded-full border border-slate-800/80 bg-slate-950/60 px-3 py-1 text-xs {% if selected_kind == 'research' %}text-slate-100{% else %}text-slate-300{% endif %}">研究动作</a>
+        <a href="{{ url_for('core.system_capabilities', symbol=selected_symbol, limit=selected_limit, kind='other') }}" class="rounded-full border border-slate-800/80 bg-slate-950/60 px-3 py-1 text-xs {% if selected_kind == 'other' %}text-slate-100{% else %}text-slate-300{% endif %}">其他历史</a>
+      </div>
+
       <div class="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
         <article class="rounded-3xl border border-sky-400/20 bg-sky-300/10 p-4">
           <p class="text-xs uppercase tracking-[0.18em] text-sky-100/70">History Summary</p>

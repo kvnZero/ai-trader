@@ -185,8 +185,11 @@ def system_capabilities() -> str:
     settings = _settings()
     capabilities = build_capability_catalog(settings)
     selected_symbol = request.args.get("symbol", "").strip()
+    selected_kind = request.args.get("kind", "").strip()
     selected_limit = _get_positive_int_arg("limit", default=8)
     recent_runs = _build_recent_activity(selected_symbol or None, limit=selected_limit)
+    if selected_kind in {"scheduled", "research", "other"}:
+        recent_runs = [item for item in recent_runs if _normalize_activity_kind(item["status"]) == selected_kind]
     recommendation_events = _build_recommendation_event_history(
         selected_symbol or None,
         limit=selected_limit,
@@ -205,6 +208,7 @@ def system_capabilities() -> str:
         activity_summary=activity_summary,
         monitoring_status=monitoring_status,
         selected_symbol=selected_symbol,
+        selected_kind=selected_kind,
         selected_limit=selected_limit,
         quick_symbols=quick_symbols,
         navigation=_WEB_NAVIGATION,
