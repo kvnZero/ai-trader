@@ -193,28 +193,82 @@
             <h3 class="mt-2 text-2xl font-semibold text-white">站内提醒中心</h3>
           </div>
           <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium text-rose-200">
-            {{ alerts|length }} 条未读
+            {{ alert_summary.total }} 条未读
           </span>
         </div>
 
-        <div class="mt-4 space-y-3">
-          {% for alert in alerts %}
-            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <div class="flex items-center gap-3">
-                    <span class="rounded-full {% if alert.level == 'high' %}bg-rose-300/15 text-rose-200{% else %}bg-amber-300/15 text-amber-200{% endif %} px-3 py-1 text-xs font-medium uppercase tracking-[0.16em]">
-                      {{ alert.level }}
-                    </span>
-                    <span class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ alert.symbol }}</span>
-                  </div>
-                  <h4 class="mt-3 text-base font-semibold text-white">{{ alert.title }}</h4>
-                  <p class="mt-2 text-sm leading-7 text-slate-300">{{ alert.summary }}</p>
-                </div>
-                <span class="text-xs text-slate-500">{{ alert.time }}</span>
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Total</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ alert_summary.total }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">High</p>
+            <p class="mt-2 text-2xl font-semibold text-rose-200">{{ alert_summary.high_count }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Medium / Other</p>
+            <p class="mt-2 text-2xl font-semibold text-amber-200">{{ alert_summary.medium_count }} / {{ alert_summary.other_count }}</p>
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Latest Unread</p>
+              {% if alert_summary.top_alert %}
+                <h4 class="mt-2 text-base font-semibold text-white">{{ alert_summary.top_alert.title }}</h4>
+              {% else %}
+                <h4 class="mt-2 text-base font-semibold text-white">当前没有未读提醒</h4>
+              {% endif %}
+            </div>
+            {% if alert_summary.top_alert %}
+              <div class="text-right">
+                <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-200">
+                  {{ alert_summary.top_alert.symbol }}
+                </span>
+                <p class="mt-2 text-xs text-slate-500">{{ alert_summary.top_alert.time }}</p>
               </div>
-            </article>
-          {% endfor %}
+            {% endif %}
+          </div>
+          <p class="mt-3 text-sm leading-7 text-slate-300">
+            {% if alert_summary.top_alert %}
+              {{ alert_summary.top_alert.summary }}
+            {% else %}
+              当有新提醒时，这里会优先展示最近一条未读消息。
+            {% endif %}
+          </p>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          {% if alerts %}
+            {% for alert in alerts %}
+              <article class="rounded-3xl border p-4 {% if loop.first %}border-rose-400/35 bg-[linear-gradient(135deg,rgba(251,113,133,0.12),rgba(15,23,42,0.92))] shadow-lg shadow-rose-950/20{% else %}border-slate-800/80 bg-slate-950/55{% endif %}">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div class="flex items-center gap-3">
+                      <span class="rounded-full {% if alert.level == 'high' %}bg-rose-300/15 text-rose-200{% elif alert.level == 'medium' %}bg-amber-300/15 text-amber-200{% else %}bg-sky-300/15 text-sky-200{% endif %} px-3 py-1 text-xs font-medium uppercase tracking-[0.16em]">
+                        {{ alert.level }}
+                      </span>
+                      <span class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ alert.symbol }}</span>
+                      {% if loop.first %}
+                        <span class="rounded-full bg-rose-300/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-100">
+                          最新未读
+                        </span>
+                      {% endif %}
+                    </div>
+                    <h4 class="{% if loop.first %}mt-3 text-lg{% else %}mt-3 text-base{% endif %} font-semibold text-white">{{ alert.title }}</h4>
+                    <p class="{% if loop.first %}mt-3 text-sm leading-7 text-slate-200{% else %}mt-2 text-sm leading-7 text-slate-300{% endif %}">{{ alert.summary }}</p>
+                  </div>
+                  <span class="text-xs text-slate-500">{{ alert.time }}</span>
+                </div>
+              </article>
+            {% endfor %}
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4 text-sm text-slate-400">
+              当前没有未读提醒。
+            </div>
+          {% endif %}
         </div>
 
         <div class="mt-4 rounded-3xl border border-slate-800/80 bg-slate-950/55 p-4 text-sm leading-7 text-slate-300">
