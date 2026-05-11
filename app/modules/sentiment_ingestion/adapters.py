@@ -5,6 +5,8 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
+import akshare as ak
+
 from app.modules.sentiment_ingestion.contracts import (
     RawSentimentPayload,
     SentimentSourceConfigurationError,
@@ -120,10 +122,93 @@ class SampleSentimentSourceAdapter(SentimentSourceAdapter):
         return get_sample_feed_items(str(sample_feed), now=now)
 
 
+class AkshareStockNewsAdapter(SentimentSourceAdapter):
+    adapter_name = "akshare_stock_news_em"
+
+    def collect(
+        self,
+        definition: SentimentSourceDefinition,
+        *,
+        now: datetime,
+    ) -> list[RawSentimentPayload]:
+        del now
+        symbols = definition.parameters.get("symbols") or definition.parameters.get("symbol")
+        if isinstance(symbols, str):
+            symbol_list = [symbols]
+        elif isinstance(symbols, Iterable):
+            symbol_list = [str(item).strip() for item in symbols if str(item).strip()]
+        else:
+            raise SentimentSourceConfigurationError(
+                f"AkShare source '{definition.metadata.source_id}' must define 'symbol' or 'symbols'."
+            )
+
+        if not symbol_list:
+            raise SentimentSourceConfigurationError(
+                f"AkShare source '{definition.metadata.source_id}' resolved no valid symbols."
+            )
+
+        max_items_per_symbol = int(definition.parameters.get("max_items_per_symbol", 5))
+        records: list[RawSentimentPayload] = []
+
+        for symbol in symbol_list:
+            frame = self._fetch_frame(symbol)
+            for row in frame.head(max_items_per_symbol).to_dict("records"):
+                records.append(self._coerce_row(symbol=symbol, row=row))
+        return records
+
+    def _fetch_frame(self, symbol: str):
+        try:
+            frame = ak.stock_news_em(symbol=symbol)
+        except Exception as exc:
+            raise SentimentSourceConfigurationError(
+                f"AkShare news fetch failed for symbol '{symbol}': {exc}"
+            ) from exc
+
+        required_columns = {"新闻标题", "新闻内容", "发布时间", "新闻链接"}
+        if not required_columns.issubset(set(frame.columns)):
+            raise SentimentSourceConfigurationError(
+                f"AkShare news response for '{symbol}' is missing required columns."
+            )
+        return frame
+
+    def _coerce_row(self, *, symbol: str, row: Mapping[str, Any]) -> RawSentimentPayload:
+        title = str(row.get("新闻标题", "")).strip()
+        content = str(row.get("新闻内容", "")).strip()
+        published_at = str(row.get("发布时间", "")).strip()
+        url = str(row.get("新闻链接", "")).strip() or None
+        source_name = str(row.get("文章来源", "东方财富")).strip() or "东方财富"
+        keyword = str(row.get("关键词", symbol)).strip() or symbol
+
+        return RawSentimentPayload(
+            title=title,
+            content=content,
+            published_at=published_at,
+            url=url,
+            sentiment_score=self._estimate_sentiment_score(title=title, content=content),
+            tags=["a-share", "news", source_name, keyword],
+            source_item_id=f"{symbol}:{published_at}:{title[:32]}",
+            raw_payload=dict(row),
+        )
+
+    def _estimate_sentiment_score(self, *, title: str, content: str) -> float:
+        text = f"{title} {content}"
+        positive_keywords = ("增长", "回升", "突破", "增持", "利好", "修复", "回流", "景气")
+        negative_keywords = ("下滑", "回落", "亏损", "减持", "利空", "承压", "风险", "走弱")
+        score = 0.0
+        for keyword in positive_keywords:
+            if keyword in text:
+                score += 0.14
+        for keyword in negative_keywords:
+            if keyword in text:
+                score -= 0.14
+        return max(-1.0, min(1.0, round(score, 2)))
+
+
 def build_default_registry() -> SentimentSourceRegistry:
     return SentimentSourceRegistry(
         adapters=[
             StaticSentimentSourceAdapter(),
             SampleSentimentSourceAdapter(),
+            AkshareStockNewsAdapter(),
         ]
     )

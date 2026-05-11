@@ -77,6 +77,23 @@ def build_default_sample_sources() -> list[SentimentSourceDefinition]:
     return [
         SentimentSourceDefinition(
             metadata=SentimentSourceMetadata(
+                source_id="eastmoney-stock-news-live",
+                source_name="Eastmoney Stock News Live",
+                category=SentimentSourceCategory.FINANCE_NEWS,
+                base_url="https://so.eastmoney.com/news/",
+                tags=["akshare", "eastmoney", "live-news"],
+                notes="Live A-share stock news feed via AkShare stock_news_em.",
+            ),
+            adapter_name="akshare_stock_news_em",
+            max_item_age=timedelta(hours=24),
+            default_item_tags=["a-share", "news", "live"],
+            parameters={
+                "symbols": ["600519", "300750", "688981", "300059"],
+                "max_items_per_symbol": 4,
+            },
+        ),
+        SentimentSourceDefinition(
+            metadata=SentimentSourceMetadata(
                 source_id="eastmoney-fast-news-sample",
                 source_name="Eastmoney Fast News Sample",
                 category=SentimentSourceCategory.FAST_NEWS,
