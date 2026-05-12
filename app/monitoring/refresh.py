@@ -247,6 +247,49 @@ class WatchlistRefreshService:
                 },
             )
 
+        mapping_average_confidence = (
+            sum(match.confidence for match in company_matches) / len(company_matches)
+            if company_matches
+            else 0.0
+        )
+        if sentiment_items and not company_matches:
+            self._record_issue(
+                issue_type="entity_mapping_missing",
+                severity="medium",
+                symbol=row.symbol,
+                message="sentiment evidence lacks supporting company mappings",
+                details={
+                    "source": source,
+                    "sentiment_count": len(sentiment_items),
+                },
+            )
+        elif company_matches and mapping_average_confidence < 0.45:
+            self._record_issue(
+                issue_type="entity_mapping_low_confidence",
+                severity="medium",
+                symbol=row.symbol,
+                message="company mappings are low-confidence for sentiment attribution",
+                details={
+                    "source": source,
+                    "mapping_average_confidence": round(mapping_average_confidence, 3),
+                    "company_match_count": len(company_matches),
+                },
+            )
+
+        if bundle.decision_trace.risk_flags:
+            self._record_issue(
+                issue_type="recommendation_risk_flags",
+                severity="medium",
+                symbol=row.symbol,
+                message="; ".join(bundle.decision_trace.risk_flags[:3]),
+                details={
+                    "source": source,
+                    "risk_flags": list(bundle.decision_trace.risk_flags[:6]),
+                    "decision_action": bundle.recommendation.action.value,
+                    "decision_confidence": bundle.decision_trace.final_confidence,
+                },
+            )
+
         outcome = RefreshOutcome(
             symbol=row.symbol,
             changed=recommendation != previous_recommendation,
