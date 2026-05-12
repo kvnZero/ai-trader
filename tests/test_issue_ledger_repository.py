@@ -31,6 +31,25 @@ class IssueLedgerRepositoryTests(TestCase):
             self.assertEqual(rows[0].issue_type, "sentiment_source_failure")
             self.assertEqual(rows[0].symbol, "600519")
             self.assertEqual(rows[0].severity, "high")
+            self.assertEqual(rows[0].occurrence_count, 1)
+
+            created_again = repository.create_issue(
+                issue_type="sentiment_source_failure",
+                severity="high",
+                status="open",
+                symbol="600519",
+                source="36kr",
+                origin_worker="sentiment_worker",
+                message="timeout",
+                details={"retryable": True},
+                created_at="2026-05-12T10:05",
+            )
+            self.assertTrue(created_again)
+
+            rows = repository.list_recent(limit=10)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].occurrence_count, 2)
+            self.assertEqual(rows[0].last_seen_at, "2026-05-12T10:05")
 
             resolved = repository.resolve_issue(rows[0].id)
             self.assertTrue(resolved)

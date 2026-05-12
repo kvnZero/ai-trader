@@ -180,6 +180,8 @@ SCHEMA_STATEMENTS = (
         message TEXT NOT NULL DEFAULT '',
         details_json TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        occurrence_count INTEGER NOT NULL DEFAULT 1,
         resolved_at TEXT,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -196,7 +198,25 @@ class Database:
         with self.connection() as conn:
             for statement in SCHEMA_STATEMENTS:
                 conn.execute(statement)
+            self._ensure_issue_ledger_columns(conn)
             conn.commit()
+
+    def _ensure_issue_ledger_columns(self, conn: sqlite3.Connection) -> None:
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(issue_ledger)").fetchall()
+        }
+        column_statements = (
+            ("last_seen_at", "ALTER TABLE issue_ledger ADD COLUMN last_seen_at TEXT"),
+            (
+                "occurrence_count",
+                "ALTER TABLE issue_ledger ADD COLUMN occurrence_count INTEGER NOT NULL DEFAULT 1",
+            ),
+            ("updated_at", "ALTER TABLE issue_ledger ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+        )
+        for column_name, statement in column_statements:
+            if column_name not in columns:
+                conn.execute(statement)
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

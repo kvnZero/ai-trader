@@ -19,6 +19,8 @@ class IssueLedgerRow:
     message: str
     details: dict[str, object]
     created_at: str
+    last_seen_at: str
+    occurrence_count: int
     resolved_at: str | None
 
 
@@ -45,10 +47,52 @@ class IssueLedgerRepository:
         with self.database.connection() as conn:
             cursor = conn.execute(
                 """
+                SELECT id, occurrence_count
+                FROM issue_ledger
+                WHERE issue_type = ?
+                  AND severity = ?
+                  AND status = 'open'
+                  AND COALESCE(symbol, '') = COALESCE(?, '')
+                  AND source = ?
+                  AND origin_worker = ?
+                  AND message = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (issue_type, severity, symbol, source, origin_worker, message),
+            ).fetchone()
+            if cursor is not None:
+                conn.execute(
+                    """
+                    UPDATE issue_ledger
+                    SET details_json = ?,
+                        severity = ?,
+                        status = ?,
+                        last_seen_at = ?,
+                        occurrence_count = ?,
+                        resolved_at = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        json.dumps(details or {}, ensure_ascii=False, default=str),
+                        severity,
+                        status,
+                        created_value,
+                        int(cursor["occurrence_count"]) + 1,
+                        resolved_value,
+                        int(cursor["id"]),
+                    ),
+                )
+                conn.commit()
+                return True
+
+            cursor = conn.execute(
+                """
                 INSERT INTO issue_ledger (
                     issue_type, severity, status, symbol, source, origin_worker,
-                    message, details_json, created_at, resolved_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    message, details_json, created_at, last_seen_at, occurrence_count, resolved_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                 """,
                 (
                     issue_type,
@@ -59,6 +103,7 @@ class IssueLedgerRepository:
                     origin_worker,
                     message,
                     json.dumps(details or {}, ensure_ascii=False, default=str),
+                    created_value,
                     created_value,
                     resolved_value,
                 ),
@@ -83,7 +128,7 @@ class IssueLedgerRepository:
     ) -> list[IssueLedgerRow]:
         query = """
             SELECT id, issue_type, severity, status, symbol, source, origin_worker,
-                   message, details_json, created_at, resolved_at
+                   message, details_json, created_at, last_seen_at, occurrence_count, resolved_at
             FROM issue_ledger
         """
         clauses: list[str] = []
@@ -102,7 +147,7 @@ class IssueLedgerRepository:
             parameters.append(status)
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY id DESC LIMIT ?"
+        query += " ORDER BY last_seen_at DESC, id DESC LIMIT ?"
         parameters.append(limit)
 
         with self.database.connection() as conn:
@@ -150,6 +195,8 @@ class IssueLedgerRepository:
             message=row["message"],
             details=dict(json.loads(row["details_json"])),
             created_at=row["created_at"],
+            last_seen_at=row["last_seen_at"] or row["created_at"],
+            occurrence_count=int(row["occurrence_count"]),
             resolved_at=row["resolved_at"],
         )
 

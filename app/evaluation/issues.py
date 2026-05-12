@@ -193,6 +193,6 @@ def _ledger_row_to_entry(row: IssueLedgerRow) -> IssueTimelineEntry:
         symbol=row.symbol,
         source=row.source or row.origin_worker or "ledger",
         message=row.message,
-        created_at=row.created_at,
-        details=dict(row.details),
+        created_at=row.last_seen_at or row.created_at,
+        details={**dict(row.details), "occurrence_count": row.occurrence_count},
     )

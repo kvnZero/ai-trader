@@ -102,6 +102,8 @@ class IssueTimelineReportTests(TestCase):
                     message="timeout",
                     details={"retryable": True},
                     created_at="2026-05-12T10:00",
+                    last_seen_at="2026-05-12T10:03",
+                    occurrence_count=3,
                     resolved_at=None,
                 )
             ],
