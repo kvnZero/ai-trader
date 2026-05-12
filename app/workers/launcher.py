@@ -23,6 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=int(os.getenv("TRADER_SENTIMENT_WORKER_INTERVAL_SECONDS", 300)),
     )
+    parser.add_argument(
+        "--event-interval-seconds",
+        type=int,
+        default=int(os.getenv("TRADER_EVENT_WORKER_INTERVAL_SECONDS", 1800)),
+    )
     return parser
 
 
@@ -50,6 +55,13 @@ def main() -> int:
             "app.workers.sentiment",
             "--interval-seconds",
             str(args.sentiment_interval_seconds),
+        ],
+        [
+            sys.executable,
+            "-m",
+            "app.workers.events",
+            "--interval-seconds",
+            str(args.event_interval_seconds),
         ],
     ]
     env["TRADER_WEB_HOST"] = str(args.host)

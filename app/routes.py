@@ -33,7 +33,7 @@ from app.modules.technical_analysis import (
 )
 from app.modules.technical_analysis.contracts import TechnicalAnalysisResult
 from app.modules.trader_agent import build_default_trader_agent_service
-from app.persistence import AlertRepository, AlertRow, RecommendationEventRepository, WatchlistRepository
+from app.persistence import AlertRepository, AlertRow, MarketEventRepository, RecommendationEventRepository, WatchlistRepository
 from app.portfolio import build_portfolio_summary
 
 bp = Blueprint("core", __name__)
@@ -84,6 +84,10 @@ def _recommendation_event_repository() -> RecommendationEventRepository:
 
 def _portfolio_settings_repository():
     return current_app.config["TRADER_PORTFOLIO_SETTINGS_REPOSITORY"]
+
+
+def _market_event_repository() -> MarketEventRepository:
+    return current_app.config["TRADER_MARKET_EVENT_REPOSITORY"]
 
 
 def _monitoring_scheduler():
@@ -552,6 +556,28 @@ def system_issue_ignore(issue_id: int) -> str:
     if repository is not None and hasattr(repository, "ignore_issue"):
         repository.ignore_issue(issue_id)
     return redirect(request.referrer or url_for("core.system_capabilities"))
+
+
+@bp.get("/api/events")
+def market_events_api() -> tuple[object, int]:
+    symbol = request.args.get("symbol", "").strip() or None
+    mode = request.args.get("mode", "").strip() or "upcoming"
+    limit = _get_positive_int_arg("limit", default=12)
+    repository = _market_event_repository()
+    items = (
+        repository.list_recent(limit=limit, symbol=symbol)
+        if mode == "recent"
+        else repository.list_upcoming(limit=limit, symbol=symbol)
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "symbol": symbol,
+            "mode": mode,
+            "limit": limit,
+            "items": to_json_ready(items),
+        }
+    ), 200
 
 
 @bp.get("/api/system/snapshots")
