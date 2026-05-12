@@ -34,6 +34,7 @@ from app.modules.technical_analysis import (
 from app.modules.technical_analysis.contracts import TechnicalAnalysisResult
 from app.modules.trader_agent import build_default_trader_agent_service
 from app.persistence import AlertRepository, AlertRow, RecommendationEventRepository, WatchlistRepository
+from app.portfolio import build_portfolio_summary
 
 bp = Blueprint("core", __name__)
 
@@ -744,6 +745,10 @@ def _build_recommendations_workspace() -> dict[str, object]:
     alerts, alert_summary = _build_alert_view_models()
     recommendation_events = _build_recommendation_event_history(limit=6)
     recent_activity = _build_recent_activity(limit=6)
+    portfolio_summary = build_portfolio_summary(
+        watchlist_rows=watchlist_rows,
+        company_dictionary=build_default_entity_mapping_service().company_dictionary,
+    )
     no_trade_queue = [
         row
         for row in watchlist_rows
@@ -768,6 +773,7 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "recent_recommendation_events": recommendation_events,
         "recent_activity": recent_activity,
         "alerts": alerts,
+        "portfolio_summary": portfolio_summary,
     }
 
 
