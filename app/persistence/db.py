@@ -196,6 +196,21 @@ SCHEMA_STATEMENTS = (
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS market_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        natural_key TEXT NOT NULL UNIQUE,
+        symbol TEXT,
+        title TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'medium',
+        event_date TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT '',
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
 )
 
 
