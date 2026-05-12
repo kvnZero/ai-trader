@@ -6,6 +6,8 @@ import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import akshare as ak
+
 from app.config import get_settings
 from app.persistence import MarketEventRepository, init_database
 from app.workers.runtime import format_worker_log, install_shutdown_handlers, run_loop
@@ -30,6 +32,77 @@ def build_parser() -> argparse.ArgumentParser:
 def _collect_events() -> list[dict[str, object]]:
     settings = get_settings()
     now = datetime.now(ZoneInfo(settings.market_timezone))
+    events: list[dict[str, object]] = []
+    events.extend(_collect_trade_calendar_events(now))
+    events.extend(_collect_fallback_rule_events(now))
+    return events
+
+
+def _collect_trade_calendar_events(now: datetime) -> list[dict[str, object]]:
+    date_key = now.strftime("%Y%m%d")
+    events: list[dict[str, object]] = []
+
+    try:
+        suspend_df = ak.news_trade_notify_suspend_baidu(date=date_key)
+        for row in suspend_df.to_dict("records"):
+            if str(row.get("证券类型", "")).lower() != "stock":
+                continue
+            if str(row.get("市场类型", "")).lower() != "ab":
+                continue
+            symbol = str(row.get("股票代码", "")).strip() or None
+            title = f"{row.get('股票简称', symbol or '未知标的')} 停复牌提醒"
+            detail = str(row.get("停牌事项说明", "停复牌事项")).strip() or "停复牌事项"
+            event_date = str(row.get("公告日期", "")).strip() or now.date().isoformat()
+            events.append(
+                {
+                    "symbol": symbol,
+                    "title": title,
+                    "event_type": "suspension_resume",
+                    "severity": "high" if "重大事项" in detail else "medium",
+                    "event_date": event_date,
+                    "source": "baidu_trade_calendar",
+                    "details": {
+                        "resume_date": str(row.get("复牌时间", "")).strip(),
+                        "suspend_date": str(row.get("停牌时间", "")).strip(),
+                        "detail": detail,
+                    },
+                }
+            )
+    except Exception:
+        pass
+
+    try:
+        dividend_df = ak.news_trade_notify_dividend_baidu(date=date_key)
+        for row in dividend_df.to_dict("records"):
+            exchange = str(row.get("交易所", "")).strip().upper()
+            if exchange not in {"SH", "SZ"}:
+                continue
+            symbol = str(row.get("股票代码", "")).strip() or None
+            title = f"{row.get('股票简称', symbol or '未知标的')} 分红派息提醒"
+            event_date = _normalize_event_date(row.get("除权日"), now)
+            events.append(
+                {
+                    "symbol": symbol,
+                    "title": title,
+                    "event_type": "dividend_ex_date",
+                    "severity": "medium",
+                    "event_date": event_date,
+                    "source": "baidu_trade_calendar",
+                    "details": {
+                        "cash_dividend": str(row.get("分红", "")).strip(),
+                        "bonus_share": str(row.get("送股", "")).strip(),
+                        "capitalization": str(row.get("转增", "")).strip(),
+                        "report_period": _normalize_event_date(row.get("报告期"), now),
+                    },
+                }
+            )
+    except Exception:
+        pass
+
+    return events
+
+
+def _collect_fallback_rule_events(now: datetime) -> list[dict[str, object]]:
     events: list[dict[str, object]] = []
 
     if now.day >= 25:
@@ -85,6 +158,15 @@ def _collect_events() -> list[dict[str, object]]:
         )
 
     return events
+
+
+def _normalize_event_date(value: object, now: datetime) -> str:
+    if value is None:
+        return now.date().isoformat()
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    text = str(value).strip()
+    return text or now.date().isoformat()
 
 
 def _run_once() -> dict[str, object]:
