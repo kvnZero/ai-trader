@@ -6,7 +6,7 @@ from app.workers.runtime import (
     build_worker_runtime,
     embedded_monitoring_enabled,
 )
-from app.persistence import RecommendationSnapshotRepository, SentimentRepository
+from app.persistence import PortfolioSettingsRepository, RecommendationSnapshotRepository, SentimentRepository
 from app.routes import bp as core_blueprint
 
 def create_app() -> Flask:
@@ -26,6 +26,7 @@ def create_app() -> Flask:
     app.config["TRADER_ALERT_REPOSITORY"] = runtime.alert_repository
     app.config["TRADER_ISSUE_LEDGER_REPOSITORY"] = runtime.issue_repository
     app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = runtime.recommendation_event_repository
+    app.config["TRADER_PORTFOLIO_SETTINGS_REPOSITORY"] = PortfolioSettingsRepository(runtime.watchlist_repository.database)
     app.config["TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY"] = RecommendationSnapshotRepository(runtime.watchlist_repository.database)
     app.config["TRADER_SENTIMENT_REPOSITORY"] = SentimentRepository(
         runtime.watchlist_repository.database,

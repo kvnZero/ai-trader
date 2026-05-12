@@ -82,6 +82,10 @@ def _recommendation_event_repository() -> RecommendationEventRepository:
     return current_app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"]
 
 
+def _portfolio_settings_repository():
+    return current_app.config["TRADER_PORTFOLIO_SETTINGS_REPOSITORY"]
+
+
 def _monitoring_scheduler():
     return current_app.config["TRADER_MONITORING_SCHEDULER"]
 
@@ -292,6 +296,18 @@ def recommendations() -> str:
         navigation=_WEB_NAVIGATION,
         active_nav="core.recommendations",
     )
+
+
+@bp.post("/recommendations/portfolio-settings")
+def update_portfolio_settings() -> str:
+    repository = _portfolio_settings_repository()
+    repository.update_settings(
+        max_total_risk_budget_pct=float(request.form.get("max_total_risk_budget_pct", "100") or 100),
+        max_single_position_pct=float(request.form.get("max_single_position_pct", "20") or 20),
+        max_industry_exposure_pct=float(request.form.get("max_industry_exposure_pct", "35") or 35),
+        max_theme_overlap_pct=float(request.form.get("max_theme_overlap_pct", "45") or 45),
+    )
+    return redirect(url_for("core.recommendations"))
 
 
 @bp.get("/issues")
@@ -745,9 +761,11 @@ def _build_recommendations_workspace() -> dict[str, object]:
     alerts, alert_summary = _build_alert_view_models()
     recommendation_events = _build_recommendation_event_history(limit=6)
     recent_activity = _build_recent_activity(limit=6)
+    portfolio_settings = _portfolio_settings_repository().get_settings()
     portfolio_summary = build_portfolio_summary(
         watchlist_rows=watchlist_rows,
         company_dictionary=build_default_entity_mapping_service().company_dictionary,
+        settings=portfolio_settings,
     )
     no_trade_queue = [
         row
@@ -773,6 +791,7 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "recent_recommendation_events": recommendation_events,
         "recent_activity": recent_activity,
         "alerts": alerts,
+        "portfolio_settings": portfolio_settings,
         "portfolio_summary": portfolio_summary,
     }
 
