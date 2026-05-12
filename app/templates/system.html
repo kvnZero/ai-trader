@@ -178,6 +178,45 @@
         </span>
       </div>
 
+      <form action="{{ url_for('core.system_capabilities') }}" method="get" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <input type="hidden" name="symbol" value="{{ selected_symbol or '' }}" />
+        <input type="hidden" name="kind" value="{{ selected_kind or '' }}" />
+        <input type="hidden" name="limit" value="{{ selected_limit or 8 }}" />
+        <label class="block">
+          <span class="text-xs uppercase tracking-[0.18em] text-slate-500">Issue Type</span>
+          <input name="issue_type" value="{{ selected_issue_type or '' }}" placeholder="sentiment_source_failure" class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40" />
+        </label>
+        <label class="block">
+          <span class="text-xs uppercase tracking-[0.18em] text-slate-500">Severity</span>
+          <select name="issue_severity" class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40">
+            <option value="" {% if not selected_issue_severity %}selected{% endif %}>All</option>
+            {% for item in ["low", "medium", "high"] %}
+              <option value="{{ item }}" {% if selected_issue_severity == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-xs uppercase tracking-[0.18em] text-slate-500">Status</span>
+          <select name="issue_status" class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40">
+            <option value="" {% if not selected_issue_status %}selected{% endif %}>All</option>
+            {% for item in ["open", "resolved", "ignored"] %}
+              <option value="{{ item }}" {% if selected_issue_status == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-xs uppercase tracking-[0.18em] text-slate-500">Issue Limit</span>
+          <select name="issue_limit" class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-400/40">
+            {% for item in [6, 12, 20, 40] %}
+              <option value="{{ item }}" {% if selected_issue_limit == item %}selected{% endif %}>最近 {{ item }} 条</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="rounded-2xl border border-sky-400/30 bg-sky-300/10 px-5 py-3 text-sm font-medium text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-300/15">
+          筛选
+        </button>
+      </form>
+
       <div class="mt-4 grid gap-3 sm:grid-cols-4">
         <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
           <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Open</p>
