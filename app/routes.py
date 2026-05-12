@@ -309,34 +309,9 @@ def system_capabilities() -> str:
         sentiment_mode="request",
         sentiment_status=sentiment_source_health.get("status", "healthy"),
     )
-    sentiment_repository = current_app.config.get("TRADER_SENTIMENT_REPOSITORY")
-    sentiment_worker_state = (
-        sentiment_repository.get_worker_state()
-        if sentiment_repository is not None and hasattr(sentiment_repository, "get_worker_state")
-        else None
-    )
-    latest_sentiment_run = (
-        sentiment_repository.get_latest_run()
-        if sentiment_repository is not None and hasattr(sentiment_repository, "get_latest_run")
-        else None
-    )
-    latest_source_failures = (
-        sentiment_repository.list_source_failures(run_id=latest_sentiment_run.id)
-        if sentiment_repository is not None
-        and latest_sentiment_run is not None
-        and hasattr(sentiment_repository, "list_source_failures")
-        else []
-    )
-    evaluation_report = build_recommendation_review_report(
-        watchlist_rows=_watchlist_repository().list_rows(),
-        recommendation_events=_recommendation_event_repository().list_recent(
-            limit=12,
-            symbol=selected_symbol or None,
-        ),
+    evaluation_report = _build_evaluation_report(
+        symbol=selected_symbol or None,
         recent_runs=recent_runs,
-        unread_alerts=_alert_repository().list_unread(),
-        sentiment_worker_state=sentiment_worker_state,
-        latest_source_failures=latest_source_failures,
     )
     return render_template(
         "system.html",
@@ -385,6 +360,27 @@ def mark_alert_read(alert_id: int) -> tuple[object, int]:
 def capabilities() -> tuple[object, int]:
     settings = _settings()
     payload = build_capability_catalog(settings)
+    return jsonify(to_json_ready(payload)), 200
+
+
+@bp.get("/api/system/workers")
+def system_workers_api() -> tuple[object, int]:
+    sentiment_source_health = _build_sentiment_source_health_summary()
+    payload = {
+        "worker_health": _build_worker_health_summary(
+            sentiment_latest_update=sentiment_source_health.get("checked_at"),
+            sentiment_mode="request",
+            sentiment_status=sentiment_source_health.get("status", "healthy"),
+        ),
+        "sentiment_source_health": sentiment_source_health,
+        "monitoring_status": _safe_monitoring_status_snapshot(),
+    }
+    return jsonify(to_json_ready(payload)), 200
+
+
+@bp.get("/api/system/review")
+def system_review_api() -> tuple[object, int]:
+    payload = _build_evaluation_report(recent_runs=_build_recent_activity(limit=12))
     return jsonify(to_json_ready(payload)), 200
 
 
@@ -1638,6 +1634,43 @@ def _build_worker_health_summary(
             "description": "行情、技术分析与推荐链路在访问研究页时计算，最近研究动作会写入历史。",
         },
     }
+
+
+def _build_evaluation_report(
+    *,
+    symbol: str | None = None,
+    recent_runs: list[dict[str, object]] | None = None,
+):
+    sentiment_repository = current_app.config.get("TRADER_SENTIMENT_REPOSITORY")
+    sentiment_worker_state = (
+        sentiment_repository.get_worker_state()
+        if sentiment_repository is not None and hasattr(sentiment_repository, "get_worker_state")
+        else None
+    )
+    latest_sentiment_run = (
+        sentiment_repository.get_latest_run()
+        if sentiment_repository is not None and hasattr(sentiment_repository, "get_latest_run")
+        else None
+    )
+    latest_source_failures = (
+        sentiment_repository.list_source_failures(run_id=latest_sentiment_run.id)
+        if sentiment_repository is not None
+        and latest_sentiment_run is not None
+        and hasattr(sentiment_repository, "list_source_failures")
+        else []
+    )
+    resolved_recent_runs = recent_runs if recent_runs is not None else _build_recent_activity(symbol, limit=12)
+    return build_recommendation_review_report(
+        watchlist_rows=_watchlist_repository().list_rows(),
+        recommendation_events=_recommendation_event_repository().list_recent(
+            limit=12,
+            symbol=symbol,
+        ),
+        recent_runs=resolved_recent_runs,
+        unread_alerts=_alert_repository().list_unread(),
+        sentiment_worker_state=sentiment_worker_state,
+        latest_source_failures=latest_source_failures,
+    )
 
 
 def _build_sentiment_summary(matched_sentiment: list[dict[str, object]]) -> dict[str, object]:
