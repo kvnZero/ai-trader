@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.persistence import RecommendationSnapshotRow
 
@@ -66,7 +66,7 @@ def build_replay_summary_report(
             )
         )
 
-    timestamp = (generated_at or datetime.utcnow()).isoformat(timespec="minutes")
+    timestamp = (generated_at or datetime.now(UTC)).isoformat(timespec="minutes")
     latest_snapshot_at = snapshot_views[0].created_at if snapshot_views else None
     average_confidence = round(confidence_total / len(snapshot_views), 3) if snapshot_views else 0.0
 

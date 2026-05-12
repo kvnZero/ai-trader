@@ -1773,6 +1773,12 @@ def _build_issue_timeline_report(
     symbol: str | None = None,
     limit: int = 12,
 ):
+    issue_repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
+    issue_rows = (
+        issue_repository.list_recent(limit=limit, symbol=symbol)
+        if issue_repository is not None and hasattr(issue_repository, "list_recent")
+        else []
+    )
     sentiment_repository = current_app.config.get("TRADER_SENTIMENT_REPOSITORY")
     snapshot_repository = current_app.config.get("TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY")
     sentiment_worker_state = (
@@ -1798,6 +1804,7 @@ def _build_issue_timeline_report(
         else []
     )
     return build_issue_timeline_report(
+        ledger_rows=issue_rows,
         worker_state=sentiment_worker_state,
         source_failures=source_failures,
         snapshots=snapshots,

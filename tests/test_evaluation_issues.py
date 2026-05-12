@@ -4,7 +4,7 @@ from datetime import datetime
 from unittest import TestCase
 
 from app.evaluation import build_issue_timeline_report
-from app.persistence import AlertRow, RecommendationSnapshotRow, SentimentSourceFailureRow, SentimentWorkerStateRow
+from app.persistence import AlertRow, IssueLedgerRow, RecommendationSnapshotRow, SentimentSourceFailureRow, SentimentWorkerStateRow
 
 
 class IssueTimelineReportTests(TestCase):
@@ -87,6 +87,34 @@ class IssueTimelineReportTests(TestCase):
         self.assertEqual(report.high_count, 1)
         self.assertIn("unread_alert", report.type_counts)
         self.assertIn("low_quality_signal", report.type_counts)
+
+    def test_prefers_ledger_rows_when_present(self) -> None:
+        report = build_issue_timeline_report(
+            ledger_rows=[
+                IssueLedgerRow(
+                    id=1,
+                    issue_type="sentiment_source_failure",
+                    severity="high",
+                    status="open",
+                    symbol=None,
+                    source="36kr",
+                    origin_worker="sentiment_worker",
+                    message="timeout",
+                    details={"retryable": True},
+                    created_at="2026-05-12T10:00",
+                    resolved_at=None,
+                )
+            ],
+            worker_state=None,
+            source_failures=[],
+            snapshots=[],
+            unread_alerts=[],
+            generated_at=datetime(2026, 5, 12, 10, 10),
+        )
+
+        self.assertEqual(report.issue_count, 1)
+        self.assertEqual(report.type_counts["sentiment_source_failure"], 1)
+        self.assertEqual(report.items[0].source, "36kr")
 
 
 if __name__ == "__main__":

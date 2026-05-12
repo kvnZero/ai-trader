@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.persistence import AlertRow, RecommendationEventRow, SentimentSourceFailureRow, SentimentWorkerStateRow, WatchlistRow
 
@@ -89,7 +89,7 @@ def build_recommendation_review_report(
         f"{failure.source_name} · {failure.error_code}"
         for failure in latest_source_failures[:3]
     ]
-    timestamp = (generated_at or datetime.utcnow()).isoformat(timespec="minutes")
+    timestamp = (generated_at or datetime.now(UTC)).isoformat(timespec="minutes")
 
     return RecommendationReviewReport(
         generated_at=timestamp,

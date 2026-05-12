@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
@@ -12,6 +12,7 @@ from app.modules.recommendation_engine import build_default_recommendation_engin
 from app.modules.sentiment_ingestion import build_default_sentiment_service
 from app.modules.technical_analysis import build_default_technical_analysis_service
 from app.persistence.alerts import AlertRepository
+from app.persistence.issues import IssueLedgerRepository
 from app.persistence.recommendation_events import RecommendationEventRepository
 from app.persistence.recommendation_snapshots import RecommendationSnapshotRepository
 from app.persistence.watchlist import WatchlistRepository, WatchlistRow
@@ -43,6 +44,7 @@ class WatchlistRefreshService:
         settings: Settings,
         watchlist_repository: WatchlistRepository,
         alert_repository: AlertRepository,
+        issue_repository: IssueLedgerRepository | None = None,
         recommendation_event_repository: RecommendationEventRepository,
         recommendation_snapshot_repository: RecommendationSnapshotRepository | None = None,
         sentiment_cache_reader: object | None = None,
@@ -50,6 +52,7 @@ class WatchlistRefreshService:
         self.settings = settings
         self.watchlist_repository = watchlist_repository
         self.alert_repository = alert_repository
+        self.issue_repository = issue_repository
         self.recommendation_event_repository = recommendation_event_repository
         self.recommendation_snapshot_repository = recommendation_snapshot_repository
         self.sentiment_cache_reader = sentiment_cache_reader
@@ -119,6 +122,13 @@ class WatchlistRefreshService:
                 stale=True,
                 detail=outcome.reason,
             )
+            self._record_issue(
+                issue_type="market_data_unavailable",
+                severity="high",
+                symbol=row.symbol,
+                message=outcome.reason,
+                details={"source": source, "status": outcome.status},
+            )
             return outcome
 
         bars_result = self.market_service.get_daily_bars(
@@ -152,6 +162,13 @@ class WatchlistRefreshService:
                 sentiment_count=0,
                 company_match_count=0,
                 turnover=snapshot_result.data.turnover,
+            )
+            self._record_issue(
+                issue_type="insufficient_history",
+                severity="medium",
+                symbol=row.symbol,
+                message=reason,
+                details={"source": source, "status": outcome.status},
             )
             return outcome
 
@@ -197,6 +214,38 @@ class WatchlistRefreshService:
             recommendation = "watch"
             reason = f"流动性偏弱，建议保守处理：{reason}"
             confidence = round(confidence * 0.85, 3)
+            self._record_issue(
+                issue_type="low_liquidity_downgrade",
+                severity="medium",
+                symbol=row.symbol,
+                message=reason,
+                details={
+                    "source": source,
+                    "turnover": turnover,
+                    "recommendation": recommendation,
+                },
+            )
+
+        if (
+            recommendation == "avoid"
+            or confidence < self.NO_TRADE_CONFIDENCE_FLOOR
+            or "信号质量不足" in reason
+            or "流动性偏弱" in reason
+            or "技术确认度不足" in reason
+        ):
+            self._record_issue(
+                issue_type="low_quality_signal",
+                severity="low" if recommendation == "watch" else "medium",
+                symbol=row.symbol,
+                message=reason,
+                details={
+                    "source": source,
+                    "recommendation": recommendation,
+                    "confidence": confidence,
+                    "market_regime": analysis_result.market_regime,
+                    "market_regime_label": analysis_result.market_regime_label,
+                },
+            )
 
         outcome = RefreshOutcome(
             symbol=row.symbol,
@@ -266,7 +315,20 @@ class WatchlistRefreshService:
                 company_match_count=company_match_count,
                 turnover=turnover,
                 reason=outcome.reason,
-                created_at=datetime.utcnow().isoformat(timespec="minutes"),
+                created_at=datetime.now(UTC).isoformat(timespec="minutes"),
+            )
+        if outcome.changed:
+            self._record_issue(
+                issue_type="recommendation_change",
+                severity="high" if outcome.recommendation in {"buy", "sell"} else "medium",
+                symbol=row.symbol,
+                message=outcome.reason,
+                details={
+                    "source": source,
+                    "previous_recommendation": previous_recommendation,
+                    "current_recommendation": outcome.recommendation,
+                    "confidence": outcome.confidence,
+                },
             )
         if outcome.recommendation != previous_recommendation:
             self.recommendation_event_repository.create_event(
@@ -304,6 +366,29 @@ class WatchlistRefreshService:
             items = payload.get("items")
             return list(items) if isinstance(items, list) else []
         return list(getattr(payload, "items", []) or [])
+
+    def _record_issue(
+        self,
+        *,
+        issue_type: str,
+        severity: str,
+        symbol: str | None,
+        message: str,
+        details: dict[str, object],
+    ) -> None:
+        if self.issue_repository is None:
+            return
+
+        self.issue_repository.create_issue(
+            issue_type=issue_type,
+            severity=severity,
+            status="open",
+            symbol=symbol,
+            source="monitoring_refresh",
+            origin_worker="monitoring_worker",
+            message=message,
+            details=details,
+        )
 
     def _now_label(self) -> str:
         timezone = ZoneInfo(self.settings.market_timezone)

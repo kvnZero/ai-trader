@@ -168,6 +168,22 @@ SCHEMA_STATEMENTS = (
         created_at TEXT NOT NULL
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS issue_ledger (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        issue_type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'medium',
+        status TEXT NOT NULL DEFAULT 'open',
+        symbol TEXT,
+        source TEXT NOT NULL DEFAULT '',
+        origin_worker TEXT NOT NULL DEFAULT '',
+        message TEXT NOT NULL DEFAULT '',
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        resolved_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
 )
 
 

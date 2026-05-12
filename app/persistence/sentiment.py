@@ -7,6 +7,7 @@ from datetime import datetime
 from app.domain import SentimentItem
 from app.modules.sentiment_ingestion.contracts import SentimentIngestionResult
 from app.persistence.db import Database
+from app.persistence.issues import IssueLedgerRepository
 
 
 DEFAULT_SENTIMENT_WORKER_NAME = "sentiment_worker"
@@ -96,9 +97,16 @@ class SentimentSourceFailureRow:
 
 
 class SentimentRepository:
-    def __init__(self, database: Database, *, worker_name: str = DEFAULT_SENTIMENT_WORKER_NAME):
+    def __init__(
+        self,
+        database: Database,
+        *,
+        worker_name: str = DEFAULT_SENTIMENT_WORKER_NAME,
+        issue_repository: IssueLedgerRepository | None = None,
+    ):
         self.database = database
         self.worker_name = worker_name
+        self.issue_repository = issue_repository
 
     def start_run(
         self,
@@ -274,6 +282,12 @@ class SentimentRepository:
             )
             self._prune_items(conn, keep_recent_items=keep_recent_items)
             conn.commit()
+        self._emit_issue_ledger(
+            run_id=run_id,
+            result=result,
+            completed_at=completed_at,
+            status=status,
+        )
 
     def record_failure(
         self,
@@ -312,6 +326,17 @@ class SentimentRepository:
                 (self.worker_name, failed_value, failed_value, run_id, error_message),
             )
             conn.commit()
+        if self.issue_repository is not None:
+            self.issue_repository.create_issue(
+                issue_type="sentiment_worker_failure",
+                severity="high",
+                status="open",
+                source=self.worker_name,
+                origin_worker=self.worker_name,
+                message=error_message,
+                details={"run_id": run_id},
+                created_at=failed_at,
+            )
 
     def list_recent_items(self, *, limit: int = 50) -> list[SentimentItemRow]:
         with self.database.connection() as conn:
@@ -572,6 +597,36 @@ class SentimentRepository:
                     json.dumps(failure.details, ensure_ascii=False, default=str),
                 ),
             )
+
+    def _emit_issue_ledger(
+        self,
+        *,
+        run_id: int,
+        result: SentimentIngestionResult,
+        completed_at: datetime,
+        status: str,
+    ) -> None:
+        if self.issue_repository is None:
+            return
+
+        if status == "degraded" or result.source_failures:
+            for failure in result.source_failures:
+                self.issue_repository.create_issue(
+                    issue_type="sentiment_source_failure",
+                    severity="high" if not failure.retryable else "medium",
+                    status="open",
+                    symbol=None,
+                    source=failure.source_metadata.source_name,
+                    origin_worker=self.worker_name,
+                    message=failure.error_message,
+                    details={
+                        "run_id": run_id,
+                        "source_id": failure.source_metadata.source_id,
+                        "error_code": failure.error_code,
+                        "retryable": failure.retryable,
+                    },
+                    created_at=completed_at,
+                )
 
     def _prune_items(self, conn, *, keep_recent_items: int) -> None:
         if keep_recent_items <= 0:

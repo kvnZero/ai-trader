@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
-from app.persistence import AlertRow, RecommendationSnapshotRow, SentimentSourceFailureRow, SentimentWorkerStateRow
+from app.persistence import (
+    AlertRow,
+    IssueLedgerRow,
+    RecommendationSnapshotRow,
+    SentimentSourceFailureRow,
+    SentimentWorkerStateRow,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +38,7 @@ class IssueTimelineReport:
 
 def build_issue_timeline_report(
     *,
+    ledger_rows: list[IssueLedgerRow] | None = None,
     worker_state: SentimentWorkerStateRow | None,
     source_failures: list[SentimentSourceFailureRow],
     snapshots: list[RecommendationSnapshotRow],
@@ -41,72 +48,75 @@ def build_issue_timeline_report(
 ) -> IssueTimelineReport:
     items: list[IssueTimelineEntry] = []
 
-    if worker_state is not None and worker_state.status in {"failed", "degraded"}:
-        severity = "high" if worker_state.status == "failed" else "medium"
-        items.append(
-            IssueTimelineEntry(
-                issue_type="sentiment_worker_state",
-                severity=severity,
-                status="open",
-                symbol=None,
-                source=worker_state.worker_name,
-                message=f"sentiment worker status is {worker_state.status}",
-                created_at=(
-                    worker_state.last_completed_at
-                    or worker_state.last_heartbeat_at
-                    or worker_state.last_started_at
-                    or ""
-                ),
-                details={
-                    "failure_count": worker_state.failure_count,
-                    "item_count": worker_state.item_count,
-                    "source_run_count": worker_state.source_run_count,
-                },
+    if ledger_rows:
+        items.extend(_ledger_row_to_entry(row) for row in ledger_rows)
+    else:
+        if worker_state is not None and worker_state.status in {"failed", "degraded"}:
+            severity = "high" if worker_state.status == "failed" else "medium"
+            items.append(
+                IssueTimelineEntry(
+                    issue_type="sentiment_worker_state",
+                    severity=severity,
+                    status="open",
+                    symbol=None,
+                    source=worker_state.worker_name,
+                    message=f"sentiment worker status is {worker_state.status}",
+                    created_at=(
+                        worker_state.last_completed_at
+                        or worker_state.last_heartbeat_at
+                        or worker_state.last_started_at
+                        or ""
+                    ),
+                    details={
+                        "failure_count": worker_state.failure_count,
+                        "item_count": worker_state.item_count,
+                        "source_run_count": worker_state.source_run_count,
+                    },
+                )
             )
-        )
 
-    for failure in source_failures:
-        items.append(
-            IssueTimelineEntry(
-                issue_type="sentiment_source_failure",
-                severity="high" if not failure.retryable else "medium",
-                status="open",
-                symbol=None,
-                source=failure.source_name,
-                message=failure.error_message,
-                created_at=failure.failed_at,
-                details={
-                    "source_id": failure.source_id,
-                    "error_code": failure.error_code,
-                    "retryable": failure.retryable,
-                },
+        for failure in source_failures:
+            items.append(
+                IssueTimelineEntry(
+                    issue_type="sentiment_source_failure",
+                    severity="high" if not failure.retryable else "medium",
+                    status="open",
+                    symbol=None,
+                    source=failure.source_name,
+                    message=failure.error_message,
+                    created_at=failure.failed_at,
+                    details={
+                        "source_id": failure.source_id,
+                        "error_code": failure.error_code,
+                        "retryable": failure.retryable,
+                    },
+                )
             )
-        )
 
-    for snapshot in snapshots:
-        if snapshot.recommendation not in {"watch", "avoid"} and snapshot.confidence >= 0.4:
-            continue
-        issue_type = "low_quality_signal" if snapshot.confidence < 0.4 else "conservative_signal"
-        severity = "medium" if snapshot.confidence < 0.4 else "low"
-        items.append(
-            IssueTimelineEntry(
-                issue_type=issue_type,
-                severity=severity,
-                status="open",
-                symbol=snapshot.symbol,
-                source=snapshot.source,
-                message=snapshot.reason,
-                created_at=snapshot.created_at,
-                details={
-                    "recommendation": snapshot.recommendation,
-                    "market_regime": snapshot.market_regime,
-                    "market_regime_label": snapshot.market_regime_label,
-                    "confidence": snapshot.confidence,
-                    "sentiment_count": snapshot.sentiment_count,
-                    "company_match_count": snapshot.company_match_count,
-                },
+        for snapshot in snapshots:
+            if snapshot.recommendation not in {"watch", "avoid"} and snapshot.confidence >= 0.4:
+                continue
+            issue_type = "low_quality_signal" if snapshot.confidence < 0.4 else "conservative_signal"
+            severity = "medium" if snapshot.confidence < 0.4 else "low"
+            items.append(
+                IssueTimelineEntry(
+                    issue_type=issue_type,
+                    severity=severity,
+                    status="open",
+                    symbol=snapshot.symbol,
+                    source=snapshot.source,
+                    message=snapshot.reason,
+                    created_at=snapshot.created_at,
+                    details={
+                        "recommendation": snapshot.recommendation,
+                        "market_regime": snapshot.market_regime,
+                        "market_regime_label": snapshot.market_regime_label,
+                        "confidence": snapshot.confidence,
+                        "sentiment_count": snapshot.sentiment_count,
+                        "company_match_count": snapshot.company_match_count,
+                    },
+                )
             )
-        )
 
     for alert in unread_alerts:
         if not alert.unread:
@@ -138,7 +148,7 @@ def build_issue_timeline_report(
         if item.severity == "high":
             high_count += 1
 
-    timestamp = (generated_at or datetime.utcnow()).isoformat(timespec="minutes")
+    timestamp = (generated_at or datetime.now(UTC)).isoformat(timespec="minutes")
     latest_issue_at = limited_items[0].created_at if limited_items else None
     return IssueTimelineReport(
         generated_at=timestamp,
@@ -149,4 +159,17 @@ def build_issue_timeline_report(
         type_counts=dict(sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))),
         latest_issue_at=latest_issue_at,
         items=limited_items,
+    )
+
+
+def _ledger_row_to_entry(row: IssueLedgerRow) -> IssueTimelineEntry:
+    return IssueTimelineEntry(
+        issue_type=row.issue_type,
+        severity=row.severity,
+        status=row.status,
+        symbol=row.symbol,
+        source=row.source or row.origin_worker or "ledger",
+        message=row.message,
+        created_at=row.created_at,
+        details=dict(row.details),
     )

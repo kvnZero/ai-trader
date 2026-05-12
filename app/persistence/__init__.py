@@ -3,6 +3,7 @@ from app.persistence.watchlist import WatchlistRepository, WatchlistRow
 from app.persistence.alerts import AlertRepository, AlertRow
 from app.persistence.recommendation_events import RecommendationEventRepository, RecommendationEventRow
 from app.persistence.recommendation_snapshots import RecommendationSnapshotRepository, RecommendationSnapshotRow
+from app.persistence.issues import IssueLedgerRepository, IssueLedgerRow
 from app.persistence.sentiment import (
     DEFAULT_SENTIMENT_WORKER_NAME,
     SentimentIngestionRunRow,
@@ -26,6 +27,8 @@ __all__ = [
     "SentimentWorkerStateRow",
     "RecommendationEventRepository",
     "RecommendationEventRow",
+    "IssueLedgerRepository",
+    "IssueLedgerRow",
     "RecommendationSnapshotRepository",
     "RecommendationSnapshotRow",
     "WatchlistRepository",

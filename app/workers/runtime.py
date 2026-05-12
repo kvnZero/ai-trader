@@ -13,6 +13,7 @@ from app.config import Settings, get_settings
 from app.monitoring import MarketHoursMonitoringScheduler, WatchlistRefreshService
 from app.persistence import (
     AlertRepository,
+    IssueLedgerRepository,
     RecommendationEventRepository,
     RecommendationSnapshotRepository,
     SentimentRepository,
@@ -28,6 +29,7 @@ class WorkerRuntime:
     settings: Settings
     watchlist_repository: WatchlistRepository
     alert_repository: AlertRepository
+    issue_repository: IssueLedgerRepository
     recommendation_event_repository: RecommendationEventRepository
     refresh_service: WatchlistRefreshService
 
@@ -62,15 +64,17 @@ def build_worker_runtime(*, settings: Settings | None = None) -> WorkerRuntime:
     database = init_database(resolved_settings.database_path)
     watchlist_repository = WatchlistRepository(database)
     alert_repository = AlertRepository(database)
+    issue_repository = IssueLedgerRepository(database)
     recommendation_event_repository = RecommendationEventRepository(database)
     recommendation_snapshot_repository = RecommendationSnapshotRepository(database)
-    sentiment_repository = SentimentRepository(database)
+    sentiment_repository = SentimentRepository(database, issue_repository=issue_repository)
     refresh_service = WatchlistRefreshService(
         settings=resolved_settings,
         watchlist_repository=watchlist_repository,
         alert_repository=alert_repository,
         recommendation_event_repository=recommendation_event_repository,
         recommendation_snapshot_repository=recommendation_snapshot_repository,
+        issue_repository=issue_repository,
         sentiment_cache_reader=sentiment_repository,
     )
 
@@ -81,6 +85,7 @@ def build_worker_runtime(*, settings: Settings | None = None) -> WorkerRuntime:
         settings=resolved_settings,
         watchlist_repository=watchlist_repository,
         alert_repository=alert_repository,
+        issue_repository=issue_repository,
         recommendation_event_repository=recommendation_event_repository,
         refresh_service=refresh_service,
     )

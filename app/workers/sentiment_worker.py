@@ -11,7 +11,7 @@ from app.config import Settings, get_settings
 from app.modules.sentiment_ingestion import build_default_sentiment_service
 from app.modules.sentiment_ingestion.contracts import SentimentSourceDefinition
 from app.modules.sentiment_ingestion.presets import build_default_sample_sources
-from app.persistence import SentimentRepository, init_database
+from app.persistence import IssueLedgerRepository, SentimentRepository, init_database
 
 
 LOGGER = logging.getLogger(__name__)
@@ -43,7 +43,11 @@ class SentimentWorker:
         self.keep_recent_items = keep_recent_items
         self._stop_event = threading.Event()
         self._database = init_database(settings.database_path)
-        self._repository = SentimentRepository(self._database)
+        self._issue_repository = IssueLedgerRepository(self._database)
+        self._repository = SentimentRepository(
+            self._database,
+            issue_repository=self._issue_repository,
+        )
         self._service = build_default_sentiment_service()
         self._sources = list(sources) if sources is not None else build_default_sample_sources()
         self._last_cycle: SentimentWorkerCycleResult | None = None
@@ -154,4 +158,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

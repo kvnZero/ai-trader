@@ -24,9 +24,13 @@ def create_app() -> Flask:
     app.config["TRADER_DATABASE"] = runtime.watchlist_repository.database
     app.config["TRADER_WATCHLIST_REPOSITORY"] = runtime.watchlist_repository
     app.config["TRADER_ALERT_REPOSITORY"] = runtime.alert_repository
+    app.config["TRADER_ISSUE_LEDGER_REPOSITORY"] = runtime.issue_repository
     app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = runtime.recommendation_event_repository
     app.config["TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY"] = RecommendationSnapshotRepository(runtime.watchlist_repository.database)
-    app.config["TRADER_SENTIMENT_REPOSITORY"] = SentimentRepository(runtime.watchlist_repository.database)
+    app.config["TRADER_SENTIMENT_REPOSITORY"] = SentimentRepository(
+        runtime.watchlist_repository.database,
+        issue_repository=runtime.issue_repository,
+    )
     app.config["TRADER_SENTIMENT_CACHE_READER"] = app.config["TRADER_SENTIMENT_REPOSITORY"]
     app.config["TRADER_WATCHLIST_REFRESH_SERVICE"] = runtime.refresh_service
     app.config["TRADER_MONITORING_SCHEDULER"] = scheduler

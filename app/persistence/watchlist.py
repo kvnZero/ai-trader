@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.persistence.db import Database
 
@@ -280,7 +280,7 @@ class WatchlistRepository:
                 INSERT INTO analysis_runs (symbol, status, stale, detail, created_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (symbol, status, int(stale), detail, datetime.utcnow().isoformat(timespec="minutes")),
+                (symbol, status, int(stale), detail, datetime.now(UTC).isoformat(timespec="minutes")),
             )
             conn.commit()
         return cursor.rowcount > 0
@@ -296,7 +296,7 @@ class WatchlistRepository:
                 INSERT INTO analysis_runs (symbol, status, stale, detail, created_at)
                 VALUES (?, 'research', 0, ?, ?)
                 """,
-                (symbol, detail, datetime.utcnow().isoformat(timespec="minutes")),
+                (symbol, detail, datetime.now(UTC).isoformat(timespec="minutes")),
             )
             conn.commit()
         return cursor.rowcount > 0
