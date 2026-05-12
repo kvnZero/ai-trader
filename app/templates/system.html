@@ -259,7 +259,7 @@
                 </div>
                 <p class="mt-2 text-sm text-slate-300">{{ issue.message }}</p>
                 <p class="mt-2 text-xs text-slate-400">
-                  {{ issue.source }}{% if issue.symbol %} · {{ issue.symbol }}{% endif %} · {{ issue.severity }} · {{ issue.status }}
+                  {{ issue.source }}{% if issue.symbol %} · {{ issue.symbol }}{% endif %} · {{ issue.severity }} · {{ issue.status }}{% if issue.details.occurrence_count is defined %} · x{{ issue.details.occurrence_count }}{% endif %}
                 </p>
                 {% if issue.issue_id and issue.status == 'open' %}
                   <div class="mt-3 flex flex-wrap gap-2">
