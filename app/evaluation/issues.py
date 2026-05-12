@@ -44,6 +44,10 @@ def build_issue_timeline_report(
     source_failures: list[SentimentSourceFailureRow],
     snapshots: list[RecommendationSnapshotRow],
     unread_alerts: list[AlertRow],
+    symbol: str | None = None,
+    issue_type: str | None = None,
+    severity: str | None = None,
+    status: str | None = None,
     generated_at: datetime | None = None,
     limit: int = 12,
 ) -> IssueTimelineReport:
@@ -53,12 +57,12 @@ def build_issue_timeline_report(
         items.extend(_ledger_row_to_entry(row) for row in ledger_rows)
     else:
         if worker_state is not None and worker_state.status in {"failed", "degraded"}:
-            severity = "high" if worker_state.status == "failed" else "medium"
+            worker_severity = "high" if worker_state.status == "failed" else "medium"
             items.append(
-            IssueTimelineEntry(
-                issue_id=None,
-                issue_type="sentiment_worker_state",
-                    severity=severity,
+                IssueTimelineEntry(
+                    issue_id=None,
+                    issue_type="sentiment_worker_state",
+                    severity=worker_severity,
                     status="open",
                     symbol=None,
                     source=worker_state.worker_name,
@@ -79,9 +83,9 @@ def build_issue_timeline_report(
 
         for failure in source_failures:
             items.append(
-            IssueTimelineEntry(
-                issue_id=None,
-                issue_type="sentiment_source_failure",
+                IssueTimelineEntry(
+                    issue_id=None,
+                    issue_type="sentiment_source_failure",
                     severity="high" if not failure.retryable else "medium",
                     status="open",
                     symbol=None,
@@ -99,13 +103,17 @@ def build_issue_timeline_report(
         for snapshot in snapshots:
             if snapshot.recommendation not in {"watch", "avoid"} and snapshot.confidence >= 0.4:
                 continue
-            issue_type = "low_quality_signal" if snapshot.confidence < 0.4 else "conservative_signal"
-            severity = "medium" if snapshot.confidence < 0.4 else "low"
+            snapshot_issue_type = (
+                "low_quality_signal"
+                if snapshot.confidence < 0.4
+                else "conservative_signal"
+            )
+            snapshot_severity = "medium" if snapshot.confidence < 0.4 else "low"
             items.append(
-            IssueTimelineEntry(
-                issue_id=None,
-                issue_type=issue_type,
-                    severity=severity,
+                IssueTimelineEntry(
+                    issue_id=None,
+                    issue_type=snapshot_issue_type,
+                    severity=snapshot_severity,
                     status="open",
                     symbol=snapshot.symbol,
                     source=snapshot.source,
@@ -138,6 +146,15 @@ def build_issue_timeline_report(
                 details={"summary": alert.summary, "level": alert.level},
             )
         )
+
+    if symbol:
+        items = [item for item in items if item.symbol == symbol]
+    if issue_type:
+        items = [item for item in items if item.issue_type == issue_type]
+    if severity:
+        items = [item for item in items if item.severity == severity]
+    if status:
+        items = [item for item in items if item.status == status]
 
     items.sort(key=lambda item: item.created_at, reverse=True)
     limited_items = items[:limit]

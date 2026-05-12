@@ -299,6 +299,10 @@ def system_capabilities() -> str:
     selected_symbol = request.args.get("symbol", "").strip()
     selected_kind = request.args.get("kind", "").strip()
     selected_limit = _get_positive_int_arg("limit", default=8)
+    selected_issue_type = request.args.get("issue_type", "").strip()
+    selected_issue_severity = request.args.get("issue_severity", "").strip()
+    selected_issue_status = request.args.get("issue_status", "").strip()
+    selected_issue_limit = _get_positive_int_arg("issue_limit", default=12)
     recent_runs = _build_recent_activity(selected_symbol or None, limit=selected_limit)
     if selected_kind in {"scheduled", "research", "other"}:
         recent_runs = [item for item in recent_runs if _normalize_activity_kind(item["status"]) == selected_kind]
@@ -321,7 +325,13 @@ def system_capabilities() -> str:
     )
     replay_report = _build_replay_report(symbol=selected_symbol or None)
     backtest_report = _build_backtest_report(symbol=selected_symbol or None)
-    issue_report = _build_issue_timeline_report(symbol=selected_symbol or None)
+    issue_report = _build_issue_timeline_report(
+        symbol=selected_symbol or None,
+        issue_type=selected_issue_type or None,
+        severity=selected_issue_severity or None,
+        status=selected_issue_status or None,
+        limit=selected_issue_limit,
+    )
     return render_template(
         "system.html",
         capabilities=capabilities,
@@ -340,6 +350,10 @@ def system_capabilities() -> str:
         selected_symbol=selected_symbol,
         selected_kind=selected_kind,
         selected_limit=selected_limit,
+        selected_issue_type=selected_issue_type,
+        selected_issue_severity=selected_issue_severity,
+        selected_issue_status=selected_issue_status,
+        selected_issue_limit=selected_issue_limit,
         quick_symbols=quick_symbols,
         navigation=_WEB_NAVIGATION,
         active_nav="core.system_capabilities",
@@ -413,7 +427,17 @@ def system_backtest_api() -> tuple[object, int]:
 @bp.get("/api/system/issues")
 def system_issues_api() -> tuple[object, int]:
     symbol = request.args.get("symbol", "").strip() or None
-    payload = _build_issue_timeline_report(symbol=symbol)
+    issue_type = request.args.get("issue_type", "").strip() or None
+    severity = request.args.get("issue_severity", "").strip() or None
+    status = request.args.get("issue_status", "").strip() or None
+    limit = _get_positive_int_arg("issue_limit", default=12)
+    payload = _build_issue_timeline_report(
+        symbol=symbol,
+        issue_type=issue_type,
+        severity=severity,
+        status=status,
+        limit=limit,
+    )
     return jsonify(to_json_ready(payload)), 200
 
 
@@ -1805,11 +1829,20 @@ def _build_backtest_report(
 def _build_issue_timeline_report(
     *,
     symbol: str | None = None,
+    issue_type: str | None = None,
+    severity: str | None = None,
+    status: str | None = None,
     limit: int = 12,
 ):
     issue_repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
     issue_rows = (
-        issue_repository.list_recent(limit=limit, symbol=symbol)
+        issue_repository.list_recent(
+            limit=limit,
+            symbol=symbol,
+            issue_type=issue_type,
+            severity=severity,
+            status=status,
+        )
         if issue_repository is not None and hasattr(issue_repository, "list_recent")
         else []
     )
@@ -1843,6 +1876,11 @@ def _build_issue_timeline_report(
         source_failures=source_failures,
         snapshots=snapshots,
         unread_alerts=_alert_repository().list_unread(),
+        symbol=symbol,
+        issue_type=issue_type,
+        severity=severity,
+        status=status,
+        limit=limit,
     )
 
 
