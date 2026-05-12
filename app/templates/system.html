@@ -170,6 +170,72 @@
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Issue Ledger</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">问题时间线</h3>
+        </div>
+        <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium text-rose-200">
+          {{ issue_report.issue_count }} 条
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-4">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Open</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ issue_report.open_count }}</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">High</p>
+          <p class="mt-2 text-2xl font-semibold text-rose-200">{{ issue_report.high_count }}</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Types</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ issue_report.type_counts|length }}</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Latest</p>
+          <p class="mt-2 text-sm font-medium text-white">{{ issue_report.latest_issue_at or "--" }}</p>
+        </article>
+      </div>
+
+      <div class="mt-4 grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Severity</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            {% for severity, count in issue_report.severity_counts.items() %}
+              <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ severity }} · {{ count }}</span>
+            {% else %}
+              <span class="text-sm text-slate-400">暂无 issue。</span>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Recent Issues</p>
+          <div class="mt-4 space-y-3">
+            {% for issue in issue_report.items %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <p class="text-sm font-semibold text-white">{{ issue.issue_type }}</p>
+                  <span class="text-xs text-slate-500">{{ issue.created_at }}</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-300">{{ issue.message }}</p>
+                <p class="mt-2 text-xs text-slate-400">
+                  {{ issue.source }}{% if issue.symbol %} · {{ issue.symbol }}{% endif %} · {{ issue.severity }} · {{ issue.status }}
+                </p>
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 text-sm text-slate-400">
+                暂无问题事件。
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
           <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Replay</p>
           <h3 class="mt-2 text-2xl font-semibold text-white">Snapshot Replay 摘要</h3>
         </div>
