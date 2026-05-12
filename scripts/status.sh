@@ -19,4 +19,5 @@ fetch() {
 
 fetch "/api/system/workers"
 fetch "/api/system/review"
+fetch "/api/system/replay"
 fetch "/api/system/snapshots?limit=5"

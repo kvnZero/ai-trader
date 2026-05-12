@@ -39,6 +39,13 @@ Check worker / review / snapshot status:
 ./scripts/status.sh
 ```
 
+The status script prints:
+
+- worker health
+- review summary
+- replay summary
+- recent recommendation snapshots
+
 Watch Tailwind CSS:
 
 ```bash
