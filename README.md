@@ -42,8 +42,10 @@ Check worker / review / snapshot status:
 The status script prints:
 
 - worker health
+- issue timeline
 - review summary
 - replay summary
+- backtest summary
 - recent recommendation snapshots
 
 Watch Tailwind CSS:
