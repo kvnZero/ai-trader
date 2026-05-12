@@ -10,7 +10,11 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 from app.config import Settings
 from app.domain import CompanyReference, MarketSnapshot, SentimentItem
 from app.domain.serialization import to_json_ready
-from app.evaluation import build_recommendation_review_report, build_sample_evaluation_cases
+from app.evaluation import (
+    build_recommendation_review_report,
+    build_replay_summary_report,
+    build_sample_evaluation_cases,
+)
 from app.modules import build_capability_catalog
 from app.modules.entity_mapping import CompanyDictionary, CompanyDictionaryEntry, build_default_entity_mapping_service
 from app.modules.entity_mapping.normalization import normalize_lookup_key
@@ -313,6 +317,7 @@ def system_capabilities() -> str:
         symbol=selected_symbol or None,
         recent_runs=recent_runs,
     )
+    replay_report = _build_replay_report(symbol=selected_symbol or None)
     return render_template(
         "system.html",
         capabilities=capabilities,
@@ -325,6 +330,7 @@ def system_capabilities() -> str:
         sentiment_source_health=sentiment_source_health,
         worker_health=worker_health,
         evaluation_report=evaluation_report,
+        replay_report=replay_report,
         selected_symbol=selected_symbol,
         selected_kind=selected_kind,
         selected_limit=selected_limit,
@@ -381,6 +387,13 @@ def system_workers_api() -> tuple[object, int]:
 @bp.get("/api/system/review")
 def system_review_api() -> tuple[object, int]:
     payload = _build_evaluation_report(recent_runs=_build_recent_activity(limit=12))
+    return jsonify(to_json_ready(payload)), 200
+
+
+@bp.get("/api/system/replay")
+def system_replay_api() -> tuple[object, int]:
+    symbol = request.args.get("symbol", "").strip() or None
+    payload = _build_replay_report(symbol=symbol)
     return jsonify(to_json_ready(payload)), 200
 
 
@@ -1704,6 +1717,20 @@ def _build_evaluation_report(
         sentiment_worker_state=sentiment_worker_state,
         latest_source_failures=latest_source_failures,
     )
+
+
+def _build_replay_report(
+    *,
+    symbol: str | None = None,
+    limit: int = 60,
+):
+    snapshot_repository = current_app.config.get("TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY")
+    snapshots = (
+        snapshot_repository.list_recent(limit=limit, symbol=symbol)
+        if snapshot_repository is not None and hasattr(snapshot_repository, "list_recent")
+        else []
+    )
+    return build_replay_summary_report(snapshots=snapshots)
 
 
 def _build_sentiment_summary(matched_sentiment: list[dict[str, object]]) -> dict[str, object]:
