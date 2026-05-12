@@ -384,6 +384,29 @@ def system_review_api() -> tuple[object, int]:
     return jsonify(to_json_ready(payload)), 200
 
 
+@bp.get("/api/system/snapshots")
+def system_snapshots_api() -> tuple[object, int]:
+    limit = _get_positive_int_arg("limit", default=20)
+    symbol = request.args.get("symbol", "").strip() or None
+    snapshot_repository = current_app.config.get("TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY")
+    if snapshot_repository is None or not hasattr(snapshot_repository, "list_recent"):
+        return jsonify(
+            {
+                "status": "unavailable",
+                "message": "recommendation snapshot repository is not configured",
+                "items": [],
+            }
+        ), 503
+
+    payload = {
+        "status": "ok",
+        "symbol": symbol,
+        "limit": limit,
+        "items": snapshot_repository.list_recent(limit=limit, symbol=symbol),
+    }
+    return jsonify(to_json_ready(payload)), 200
+
+
 @bp.get("/api/evaluation/cases")
 def evaluation_cases_api() -> tuple[object, int]:
     payload = {
