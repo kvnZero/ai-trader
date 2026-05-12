@@ -11,8 +11,8 @@ from app.workers.runtime import format_worker_log
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Launch web plus standalone workers.")
-    parser.add_argument("--host", default=os.getenv("FLASK_RUN_HOST", "127.0.0.1"))
-    parser.add_argument("--port", default=os.getenv("FLASK_RUN_PORT", "5000"))
+    parser.add_argument("--host", default=os.getenv("TRADER_WEB_HOST", "127.0.0.1"))
+    parser.add_argument("--port", default=os.getenv("TRADER_WEB_PORT", "5000"))
     parser.add_argument(
         "--monitoring-interval-seconds",
         type=int,
@@ -52,8 +52,8 @@ def main() -> int:
             str(args.sentiment_interval_seconds),
         ],
     ]
-    env["FLASK_RUN_HOST"] = str(args.host)
-    env["FLASK_RUN_PORT"] = str(args.port)
+    env["TRADER_WEB_HOST"] = str(args.host)
+    env["TRADER_WEB_PORT"] = str(args.port)
 
     processes = [subprocess.Popen(command, env=env) for command in commands]
     print(
