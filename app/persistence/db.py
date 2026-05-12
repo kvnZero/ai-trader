@@ -186,6 +186,16 @@ SCHEMA_STATEMENTS = (
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS portfolio_settings (
+        profile TEXT PRIMARY KEY,
+        max_total_risk_budget_pct REAL NOT NULL DEFAULT 100.0,
+        max_single_position_pct REAL NOT NULL DEFAULT 20.0,
+        max_industry_exposure_pct REAL NOT NULL DEFAULT 35.0,
+        max_theme_overlap_pct REAL NOT NULL DEFAULT 45.0,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
 )
 
 

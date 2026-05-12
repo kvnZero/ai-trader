@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest import TestCase
 
 from app.modules.entity_mapping.dictionary import build_default_company_dictionary
+from app.persistence.portfolio import PortfolioSettingsRow
 from app.persistence.watchlist import WatchlistRow
 from app.portfolio import build_portfolio_summary
 
@@ -55,10 +56,13 @@ class PortfolioServiceTests(TestCase):
         summary = build_portfolio_summary(
             watchlist_rows=rows,
             company_dictionary=company_dictionary,
-            max_total_risk_budget_pct=40.0,
-            max_single_position_pct=20.0,
-            max_industry_exposure_pct=25.0,
-            max_theme_overlap_pct=30.0,
+            settings=PortfolioSettingsRow(
+                profile="default",
+                max_total_risk_budget_pct=40.0,
+                max_single_position_pct=20.0,
+                max_industry_exposure_pct=25.0,
+                max_theme_overlap_pct=30.0,
+            ),
         )
 
         self.assertEqual(summary.total_watchlist_count, 3)
