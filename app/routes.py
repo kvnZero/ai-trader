@@ -10,6 +10,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 from app.config import Settings
 from app.domain import CompanyReference, MarketSnapshot, SentimentItem
 from app.domain.serialization import to_json_ready
+from app.evaluation import build_recommendation_review_report
 from app.modules import build_capability_catalog
 from app.modules.entity_mapping import CompanyDictionary, CompanyDictionaryEntry, build_default_entity_mapping_service
 from app.modules.entity_mapping.normalization import normalize_lookup_key
@@ -308,6 +309,35 @@ def system_capabilities() -> str:
         sentiment_mode="request",
         sentiment_status=sentiment_source_health.get("status", "healthy"),
     )
+    sentiment_repository = current_app.config.get("TRADER_SENTIMENT_REPOSITORY")
+    sentiment_worker_state = (
+        sentiment_repository.get_worker_state()
+        if sentiment_repository is not None and hasattr(sentiment_repository, "get_worker_state")
+        else None
+    )
+    latest_sentiment_run = (
+        sentiment_repository.get_latest_run()
+        if sentiment_repository is not None and hasattr(sentiment_repository, "get_latest_run")
+        else None
+    )
+    latest_source_failures = (
+        sentiment_repository.list_source_failures(run_id=latest_sentiment_run.id)
+        if sentiment_repository is not None
+        and latest_sentiment_run is not None
+        and hasattr(sentiment_repository, "list_source_failures")
+        else []
+    )
+    evaluation_report = build_recommendation_review_report(
+        watchlist_rows=_watchlist_repository().list_rows(),
+        recommendation_events=_recommendation_event_repository().list_recent(
+            limit=12,
+            symbol=selected_symbol or None,
+        ),
+        recent_runs=recent_runs,
+        unread_alerts=_alert_repository().list_unread(),
+        sentiment_worker_state=sentiment_worker_state,
+        latest_source_failures=latest_source_failures,
+    )
     return render_template(
         "system.html",
         capabilities=capabilities,
@@ -319,6 +349,7 @@ def system_capabilities() -> str:
         monitoring_status=monitoring_status,
         sentiment_source_health=sentiment_source_health,
         worker_health=worker_health,
+        evaluation_report=evaluation_report,
         selected_symbol=selected_symbol,
         selected_kind=selected_kind,
         selected_limit=selected_limit,

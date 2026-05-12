@@ -56,6 +56,101 @@
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Review</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">推荐复盘摘要</h3>
+        </div>
+        <span class="rounded-full border border-sky-400/30 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-200">
+          {{ evaluation_report.recent_event_count }} 条变化
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-4">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">当前覆盖</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ evaluation_report.watchlist_count }}</p>
+          <p class="mt-1 text-sm text-slate-400">关注标的</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">保守信号</p>
+          <p class="mt-2 text-2xl font-semibold text-amber-200">{{ "%.0f"|format(evaluation_report.conservative_ratio * 100) }}%</p>
+          <p class="mt-1 text-sm text-slate-400">{{ evaluation_report.conservative_count }} / {{ evaluation_report.watchlist_count or 0 }}</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">高优未读</p>
+          <p class="mt-2 text-2xl font-semibold text-rose-200">{{ evaluation_report.unread_high_alert_count }}</p>
+          <p class="mt-1 text-sm text-slate-400">需优先处理</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">舆情 worker</p>
+          <p class="mt-2 text-2xl font-semibold {% if evaluation_report.sentiment_worker_status == 'degraded' %}text-amber-200{% elif evaluation_report.sentiment_worker_status == 'failed' %}text-rose-200{% else %}text-white{% endif %}">
+            {{ evaluation_report.sentiment_worker_status }}
+          </p>
+          <p class="mt-1 text-sm text-slate-400">{{ evaluation_report.sentiment_latest_update or "--" }}</p>
+        </article>
+      </div>
+
+      <div class="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Action Mix</p>
+          <div class="mt-3 grid gap-3 sm:grid-cols-4">
+            <div>
+              <p class="text-xs text-slate-500">BUY</p>
+              <p class="mt-1 text-lg font-semibold text-emerald-200">{{ evaluation_report.action_counts.buy }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-500">SELL</p>
+              <p class="mt-1 text-lg font-semibold text-rose-200">{{ evaluation_report.action_counts.sell }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-500">WATCH</p>
+              <p class="mt-1 text-lg font-semibold text-slate-200">{{ evaluation_report.action_counts.watch }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-500">AVOID</p>
+              <p class="mt-1 text-lg font-semibold text-amber-200">{{ evaluation_report.action_counts.avoid }}</p>
+            </div>
+          </div>
+          <p class="mt-4 text-sm text-slate-400">stale runs: {{ evaluation_report.stale_run_count }}</p>
+          {% if evaluation_report.sentiment_failure_summary %}
+            <div class="mt-4 flex flex-wrap gap-2">
+              {% for item in evaluation_report.sentiment_failure_summary %}
+                <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ item }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </article>
+
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Recent Review Events</p>
+              <p class="mt-1 text-sm text-slate-400">最近变化可直接作为后续 replay / backtest 的轻量样本。</p>
+            </div>
+            <span class="text-xs text-slate-500">{{ evaluation_report.generated_at }}</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            {% for event in evaluation_report.recent_events %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <a href="{{ url_for('core.research', query=event.symbol) }}" class="text-sm font-semibold text-white transition hover:text-sky-200">{{ event.symbol }}</a>
+                  <span class="text-xs text-slate-500">{{ event.created_at }}</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-300">{{ event.previous_action or "none" }} -> {{ event.current_action }} · {{ "%.0f"|format(event.confidence * 100) }}%</p>
+                <p class="mt-2 text-sm leading-7 text-slate-400">{{ event.summary }}</p>
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 text-sm text-slate-400">
+                暂无足够的推荐变化样本，后续运行会逐步形成复盘数据集。
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
           <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Sentiment Source Health</p>
           <h3 class="mt-2 text-2xl font-semibold text-white">舆情来源健康概览</h3>
         </div>
