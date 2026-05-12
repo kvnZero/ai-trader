@@ -290,6 +290,58 @@
         <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
           <div class="flex items-center justify-between gap-4">
             <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Regime Breakdown</p>
+              <p class="mt-1 text-sm text-slate-400">按市场状态拆分后验表现。</p>
+            </div>
+            <span class="text-xs text-slate-500">{{ backtest_report.regime_breakdown|length }} groups</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            {% for row in backtest_report.regime_breakdown %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <p class="text-sm font-semibold text-white">{{ row.label }}</p>
+                  <span class="text-xs text-slate-500">{{ row.snapshot_count }} snapshots</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-300">hit {{ "%.0f"|format(row.hit_rate * 100) }}% · avg {{ "%.1f"|format(row.average_forward_return_pct) }}%</p>
+                <p class="mt-1 text-sm text-slate-400">runup {{ "%.1f"|format(row.average_max_runup_pct) }}% / drawdown {{ "%.1f"|format(row.average_max_drawdown_pct) }}%</p>
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 text-sm text-slate-400">
+                暂无 regime breakdown 数据。
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Action Breakdown</p>
+              <p class="mt-1 text-sm text-slate-400">按动作类型拆分后验表现。</p>
+            </div>
+            <span class="text-xs text-slate-500">{{ backtest_report.action_breakdown|length }} groups</span>
+          </div>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            {% for row in backtest_report.action_breakdown %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <p class="text-sm font-semibold text-white">{{ row.label }}</p>
+                  <span class="text-xs text-slate-500">{{ row.snapshot_count }}</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-300">{{ "%.0f"|format(row.hit_rate * 100) }}% hit</p>
+                <p class="mt-1 text-sm text-slate-400">avg {{ "%.1f"|format(row.average_forward_return_pct) }}% · MAE {{ "%.1f"|format(row.average_max_drawdown_pct) }}%</p>
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 text-sm text-slate-400">
+                暂无 action breakdown 数据。
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
               <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Recent Evaluations</p>
               <p class="mt-1 text-sm text-slate-400">用于后续 replay/backtest 的结果样本。</p>
             </div>
