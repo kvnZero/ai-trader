@@ -10,7 +10,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 from app.config import Settings
 from app.domain import CompanyReference, MarketSnapshot, SentimentItem
 from app.domain.serialization import to_json_ready
-from app.evaluation import build_recommendation_review_report
+from app.evaluation import build_recommendation_review_report, build_sample_evaluation_cases
 from app.modules import build_capability_catalog
 from app.modules.entity_mapping import CompanyDictionary, CompanyDictionaryEntry, build_default_entity_mapping_service
 from app.modules.entity_mapping.normalization import normalize_lookup_key
@@ -381,6 +381,16 @@ def system_workers_api() -> tuple[object, int]:
 @bp.get("/api/system/review")
 def system_review_api() -> tuple[object, int]:
     payload = _build_evaluation_report(recent_runs=_build_recent_activity(limit=12))
+    return jsonify(to_json_ready(payload)), 200
+
+
+@bp.get("/api/evaluation/cases")
+def evaluation_cases_api() -> tuple[object, int]:
+    payload = {
+        "generated_at": datetime.now(ZoneInfo(_settings().market_timezone)).isoformat(timespec="minutes"),
+        "case_count": len(build_sample_evaluation_cases()),
+        "cases": build_sample_evaluation_cases(),
+    }
     return jsonify(to_json_ready(payload)), 200
 
 
