@@ -1139,6 +1139,21 @@ def _normalize_sentiment_failure(failure: object) -> dict[str, object]:
 
 
 def _build_market_event_watch() -> list[dict[str, object]]:
+    repository = current_app.config.get("TRADER_MARKET_EVENT_REPOSITORY")
+    if repository is not None and hasattr(repository, "list_upcoming"):
+        rows = repository.list_upcoming(limit=4)
+        if rows:
+            return [
+                {
+                    "title": row.title,
+                    "detail": f"{row.event_type} · {row.source}",
+                    "level": row.severity,
+                    "event_date": row.event_date,
+                    "symbol": row.symbol,
+                }
+                for row in rows
+            ]
+
     settings = _settings()
     now = datetime.now(ZoneInfo(settings.market_timezone))
     events: list[dict[str, object]] = []
