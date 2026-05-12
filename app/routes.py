@@ -60,6 +60,7 @@ _WEB_NAVIGATION = (
     {"endpoint": "core.dashboard", "label": "总览", "description": "Dashboard"},
     {"endpoint": "core.research", "label": "个股研究", "description": "Research"},
     {"endpoint": "core.sentiment", "label": "舆情监控", "description": "Sentiment"},
+    {"endpoint": "core.events", "label": "事件引擎", "description": "Events"},
     {"endpoint": "core.recommendations", "label": "交易员建议", "description": "Agent"},
     {"endpoint": "core.issue_center", "label": "问题中心", "description": "Issues"},
     {"endpoint": "core.system_capabilities", "label": "系统能力", "description": "System"},
@@ -287,6 +288,28 @@ def sentiment() -> str:
         worker_health=worker_health,
         navigation=_WEB_NAVIGATION,
         active_nav="core.sentiment",
+    )
+
+
+@bp.get("/events")
+def events() -> str:
+    symbol = request.args.get("symbol", "").strip()
+    mode = request.args.get("mode", "").strip() or "upcoming"
+    limit = _get_positive_int_arg("limit", default=20)
+    repository = _market_event_repository()
+    event_rows = (
+        repository.list_recent(limit=limit, symbol=symbol or None)
+        if mode == "recent"
+        else repository.list_upcoming(limit=limit, symbol=symbol or None)
+    )
+    return render_template(
+        "events.html",
+        mode=mode,
+        limit=limit,
+        selected_symbol=symbol,
+        event_rows=event_rows,
+        navigation=_WEB_NAVIGATION,
+        active_nav="core.events",
     )
 
 
