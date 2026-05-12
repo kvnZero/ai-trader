@@ -14,6 +14,7 @@ from app.monitoring import MarketHoursMonitoringScheduler, WatchlistRefreshServi
 from app.persistence import (
     AlertRepository,
     RecommendationEventRepository,
+    RecommendationSnapshotRepository,
     SentimentRepository,
     WatchlistRepository,
     init_database,
@@ -62,12 +63,14 @@ def build_worker_runtime(*, settings: Settings | None = None) -> WorkerRuntime:
     watchlist_repository = WatchlistRepository(database)
     alert_repository = AlertRepository(database)
     recommendation_event_repository = RecommendationEventRepository(database)
+    recommendation_snapshot_repository = RecommendationSnapshotRepository(database)
     sentiment_repository = SentimentRepository(database)
     refresh_service = WatchlistRefreshService(
         settings=resolved_settings,
         watchlist_repository=watchlist_repository,
         alert_repository=alert_repository,
         recommendation_event_repository=recommendation_event_repository,
+        recommendation_snapshot_repository=recommendation_snapshot_repository,
         sentiment_cache_reader=sentiment_repository,
     )
 

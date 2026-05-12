@@ -151,6 +151,23 @@ SCHEMA_STATEMENTS = (
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS recommendation_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL,
+        source TEXT NOT NULL,
+        recommendation TEXT NOT NULL,
+        confidence REAL NOT NULL DEFAULT 0.0,
+        market_regime TEXT,
+        market_regime_label TEXT,
+        confirmation_score REAL,
+        sentiment_count INTEGER NOT NULL DEFAULT 0,
+        company_match_count INTEGER NOT NULL DEFAULT 0,
+        turnover REAL,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+    )
+    """,
 )
 
 

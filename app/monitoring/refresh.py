@@ -13,6 +13,7 @@ from app.modules.sentiment_ingestion import build_default_sentiment_service
 from app.modules.technical_analysis import build_default_technical_analysis_service
 from app.persistence.alerts import AlertRepository
 from app.persistence.recommendation_events import RecommendationEventRepository
+from app.persistence.recommendation_snapshots import RecommendationSnapshotRepository
 from app.persistence.watchlist import WatchlistRepository, WatchlistRow
 
 
@@ -43,12 +44,14 @@ class WatchlistRefreshService:
         watchlist_repository: WatchlistRepository,
         alert_repository: AlertRepository,
         recommendation_event_repository: RecommendationEventRepository,
+        recommendation_snapshot_repository: RecommendationSnapshotRepository | None = None,
         sentiment_cache_reader: object | None = None,
     ):
         self.settings = settings
         self.watchlist_repository = watchlist_repository
         self.alert_repository = alert_repository
         self.recommendation_event_repository = recommendation_event_repository
+        self.recommendation_snapshot_repository = recommendation_snapshot_repository
         self.sentiment_cache_reader = sentiment_cache_reader
         self.market_service = build_default_market_data_service()
         self.technical_service = build_default_technical_analysis_service()
@@ -138,7 +141,18 @@ class WatchlistRefreshService:
                 alert_created=False,
                 source=source,
             )
-            self._persist_row_refresh(row, outcome, previous_recommendation, source)
+            self._persist_row_refresh(
+                row,
+                outcome,
+                previous_recommendation,
+                source,
+                market_regime=None,
+                market_regime_label=None,
+                confirmation_score=None,
+                sentiment_count=0,
+                company_match_count=0,
+                turnover=snapshot_result.data.turnover,
+            )
             return outcome
 
         analysis_result = self.technical_service.analyze_bars(bars_result.data)
@@ -196,7 +210,18 @@ class WatchlistRefreshService:
             alert_created=False,
             source=source,
         )
-        self._persist_row_refresh(row, outcome, previous_recommendation, source)
+        self._persist_row_refresh(
+            row,
+            outcome,
+            previous_recommendation,
+            source,
+            market_regime=analysis_result.market_regime,
+            market_regime_label=analysis_result.market_regime_label,
+            confirmation_score=analysis_result.confirmation_score,
+            sentiment_count=len(sentiment_items),
+            company_match_count=len(company_matches),
+            turnover=snapshot_result.data.turnover,
+        )
         return outcome
 
     def _persist_row_refresh(
@@ -205,6 +230,13 @@ class WatchlistRefreshService:
         outcome: RefreshOutcome,
         previous_recommendation: str,
         source: str,
+        *,
+        market_regime: str | None,
+        market_regime_label: str | None,
+        confirmation_score: float | None,
+        sentiment_count: int,
+        company_match_count: int,
+        turnover: float | None,
     ) -> None:
         self.watchlist_repository.record_refresh(
             row.symbol,
@@ -221,6 +253,21 @@ class WatchlistRefreshService:
             stale=False,
             detail=outcome.reason,
         )
+        if self.recommendation_snapshot_repository is not None:
+            self.recommendation_snapshot_repository.create_snapshot(
+                symbol=row.symbol,
+                source=source,
+                recommendation=outcome.recommendation,
+                confidence=outcome.confidence,
+                market_regime=market_regime,
+                market_regime_label=market_regime_label,
+                confirmation_score=confirmation_score,
+                sentiment_count=sentiment_count,
+                company_match_count=company_match_count,
+                turnover=turnover,
+                reason=outcome.reason,
+                created_at=datetime.utcnow().isoformat(timespec="minutes"),
+            )
         if outcome.recommendation != previous_recommendation:
             self.recommendation_event_repository.create_event(
                 symbol=row.symbol,
