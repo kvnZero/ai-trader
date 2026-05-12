@@ -12,6 +12,7 @@ from app.domain import CompanyReference, MarketSnapshot, SentimentItem
 from app.domain.serialization import to_json_ready
 from app.evaluation import (
     build_backtest_summary_report,
+    build_issue_stats_report,
     build_issue_timeline_report,
     build_recommendation_review_report,
     build_replay_summary_report,
@@ -307,6 +308,13 @@ def issue_center() -> str:
         status=selected_issue_status or None,
         limit=selected_issue_limit,
     )
+    issue_stats_report = _build_issue_stats_report(
+        symbol=selected_symbol or None,
+        issue_type=selected_issue_type or None,
+        severity=selected_issue_severity or None,
+        status=selected_issue_status or None,
+        limit=max(selected_issue_limit, 80),
+    )
     worker_health = _build_worker_health_summary(
         sentiment_latest_update=_build_sentiment_source_health_summary().get("checked_at"),
         sentiment_mode="request",
@@ -316,6 +324,7 @@ def issue_center() -> str:
         "issues.html",
         settings=settings,
         issue_report=issue_report,
+        issue_stats_report=issue_stats_report,
         worker_health=worker_health,
         selected_symbol=selected_symbol,
         selected_issue_type=selected_issue_type,
@@ -468,6 +477,23 @@ def system_issues_api() -> tuple[object, int]:
     status = request.args.get("issue_status", "").strip() or None
     limit = _get_positive_int_arg("issue_limit", default=12)
     payload = _build_issue_timeline_report(
+        symbol=symbol,
+        issue_type=issue_type,
+        severity=severity,
+        status=status,
+        limit=limit,
+    )
+    return jsonify(to_json_ready(payload)), 200
+
+
+@bp.get("/api/system/issues/stats")
+def system_issue_stats_api() -> tuple[object, int]:
+    symbol = request.args.get("symbol", "").strip() or None
+    issue_type = request.args.get("issue_type", "").strip() or None
+    severity = request.args.get("issue_severity", "").strip() or None
+    status = request.args.get("issue_status", "").strip() or None
+    limit = _get_positive_int_arg("issue_limit", default=80)
+    payload = _build_issue_stats_report(
         symbol=symbol,
         issue_type=issue_type,
         severity=severity,
@@ -1918,6 +1944,29 @@ def _build_issue_timeline_report(
         status=status,
         limit=limit,
     )
+
+
+def _build_issue_stats_report(
+    *,
+    symbol: str | None = None,
+    issue_type: str | None = None,
+    severity: str | None = None,
+    status: str | None = None,
+    limit: int = 80,
+):
+    issue_repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
+    issue_rows = (
+        issue_repository.list_recent(
+            limit=limit,
+            symbol=symbol,
+            issue_type=issue_type,
+            severity=severity,
+            status=status,
+        )
+        if issue_repository is not None and hasattr(issue_repository, "list_recent")
+        else []
+    )
+    return build_issue_stats_report(issue_rows=issue_rows)
 
 
 def _build_sentiment_summary(matched_sentiment: list[dict[str, object]]) -> dict[str, object]:
