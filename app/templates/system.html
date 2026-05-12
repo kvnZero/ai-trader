@@ -244,6 +244,80 @@
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Backtest</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">后验表现摘要</h3>
+        </div>
+        <span class="rounded-full border border-emerald-400/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
+          {{ backtest_report.evaluated_count }} / {{ backtest_report.snapshot_count }}
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-4">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">BUY/SELL 命中</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ "%.0f"|format(backtest_report.buy_sell_hit_rate * 100) }}%</p>
+          <p class="mt-1 text-sm text-slate-400">{{ backtest_report.buy_sell_hit_count }} / {{ backtest_report.buy_sell_evaluated_count }}</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">保守命中</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ "%.0f"|format(backtest_report.conservative_hit_rate * 100) }}%</p>
+          <p class="mt-1 text-sm text-slate-400">{{ backtest_report.conservative_hit_count }} / {{ backtest_report.conservative_evaluated_count }}</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">平均收益</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ "%.1f"|format(backtest_report.average_forward_return_pct) }}%</p>
+          <p class="mt-1 text-sm text-slate-400">forward return</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">平均波动</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ "%.1f"|format(backtest_report.average_max_drawdown_pct) }}%</p>
+          <p class="mt-1 text-sm text-slate-400">MAE / runup {{ "%.1f"|format(backtest_report.average_max_runup_pct) }}%</p>
+        </article>
+      </div>
+
+      <div class="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Regime Counts</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            {% for regime, count in backtest_report.regime_counts.items() %}
+              <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ regime }} · {{ count }}</span>
+            {% else %}
+              <span class="text-sm text-slate-400">暂无 backtest regime 数据。</span>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Recent Evaluations</p>
+              <p class="mt-1 text-sm text-slate-400">用于后续 replay/backtest 的结果样本。</p>
+            </div>
+            <span class="text-xs text-slate-500">{{ backtest_report.generated_at }}</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            {% for evaluation in backtest_report.evaluations %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <a href="{{ url_for('core.research', query=evaluation.symbol) }}" class="text-sm font-semibold text-white transition hover:text-sky-200">{{ evaluation.symbol }}</a>
+                  <span class="text-xs text-slate-500">{{ evaluation.exit_date }}</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-300">{{ evaluation.action }} · {{ evaluation.market_regime_label or evaluation.market_regime or "--" }} · {{ "%.1f"|format(evaluation.forward_return_pct) }}%</p>
+                <p class="mt-2 text-sm leading-7 text-slate-400">runup {{ "%.1f"|format(evaluation.max_runup_pct) }}% / drawdown {{ "%.1f"|format(evaluation.max_drawdown_pct) }}% · sentiment {{ evaluation.sentiment_count }} · match {{ evaluation.company_match_count }}</p>
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 text-sm text-slate-400">
+                暂无可评估样本，先积累 recommendation snapshot 数据。
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
           <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Sentiment Source Health</p>
           <h3 class="mt-2 text-2xl font-semibold text-white">舆情来源健康概览</h3>
         </div>
