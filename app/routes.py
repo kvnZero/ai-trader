@@ -11,6 +11,7 @@ from app.config import Settings
 from app.domain import CompanyReference, MarketSnapshot, SentimentItem
 from app.domain.serialization import to_json_ready
 from app.evaluation import (
+    build_backtest_summary_report,
     build_recommendation_review_report,
     build_replay_summary_report,
     build_sample_evaluation_cases,
@@ -318,6 +319,7 @@ def system_capabilities() -> str:
         recent_runs=recent_runs,
     )
     replay_report = _build_replay_report(symbol=selected_symbol or None)
+    backtest_report = _build_backtest_report(symbol=selected_symbol or None)
     return render_template(
         "system.html",
         capabilities=capabilities,
@@ -331,6 +333,7 @@ def system_capabilities() -> str:
         worker_health=worker_health,
         evaluation_report=evaluation_report,
         replay_report=replay_report,
+        backtest_report=backtest_report,
         selected_symbol=selected_symbol,
         selected_kind=selected_kind,
         selected_limit=selected_limit,
@@ -394,6 +397,13 @@ def system_review_api() -> tuple[object, int]:
 def system_replay_api() -> tuple[object, int]:
     symbol = request.args.get("symbol", "").strip() or None
     payload = _build_replay_report(symbol=symbol)
+    return jsonify(to_json_ready(payload)), 200
+
+
+@bp.get("/api/system/backtest")
+def system_backtest_api() -> tuple[object, int]:
+    symbol = request.args.get("symbol", "").strip() or None
+    payload = _build_backtest_report(symbol=symbol)
     return jsonify(to_json_ready(payload)), 200
 
 
@@ -1731,6 +1741,21 @@ def _build_replay_report(
         else []
     )
     return build_replay_summary_report(snapshots=snapshots)
+
+
+def _build_backtest_report(
+    *,
+    symbol: str | None = None,
+    limit: int = 20,
+):
+    snapshot_repository = current_app.config.get("TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY")
+    market_service = build_default_market_data_service()
+    snapshots = (
+        snapshot_repository.list_recent(limit=limit, symbol=symbol)
+        if snapshot_repository is not None and hasattr(snapshot_repository, "list_recent")
+        else []
+    )
+    return build_backtest_summary_report(snapshots=snapshots, market_data_service=market_service)
 
 
 def _build_sentiment_summary(matched_sentiment: list[dict[str, object]]) -> dict[str, object]:
