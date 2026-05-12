@@ -277,17 +277,12 @@ class WatchlistRefreshService:
             )
 
         if bundle.decision_trace.risk_flags:
-            self._record_issue(
-                issue_type="recommendation_risk_flags",
-                severity="medium",
-                symbol=row.symbol,
-                message="; ".join(bundle.decision_trace.risk_flags[:3]),
-                details={
-                    "source": source,
-                    "risk_flags": list(bundle.decision_trace.risk_flags[:6]),
-                    "decision_action": bundle.recommendation.action.value,
-                    "decision_confidence": bundle.decision_trace.final_confidence,
-                },
+            self._record_decision_risk_issues(
+                row=row,
+                source=source,
+                risk_flags=list(bundle.decision_trace.risk_flags),
+                decision_action=bundle.recommendation.action.value,
+                decision_confidence=bundle.decision_trace.final_confidence,
             )
 
         outcome = RefreshOutcome(
@@ -432,6 +427,49 @@ class WatchlistRefreshService:
             message=message,
             details=details,
         )
+
+    def _record_decision_risk_issues(
+        self,
+        *,
+        row: WatchlistRow,
+        source: str,
+        risk_flags: list[str],
+        decision_action: str,
+        decision_confidence: float,
+    ) -> None:
+        for risk_flag in risk_flags[:6]:
+            issue_type, severity = self._classify_risk_flag_issue(risk_flag, decision_action)
+            self._record_issue(
+                issue_type=issue_type,
+                severity=severity,
+                symbol=row.symbol,
+                message=risk_flag,
+                details={
+                    "source": source,
+                    "decision_action": decision_action,
+                    "decision_confidence": decision_confidence,
+                    "risk_flag": risk_flag,
+                },
+            )
+
+    def _classify_risk_flag_issue(self, risk_flag: str, decision_action: str) -> tuple[str, str]:
+        normalized = risk_flag.lower()
+        if "technical signals" in normalized or "technical coverage" in normalized:
+            return "technical_coverage_unavailable", "high"
+        if "sentiment coverage is unavailable" in normalized:
+            return "sentiment_coverage_unavailable", "medium"
+        if (
+            ("sentiment inputs" in normalized and "stale" in normalized)
+            or "stale relative to the decision time" in normalized
+        ):
+            return "sentiment_data_stale", "medium"
+        if "technical and sentiment" in normalized or "disagree" in normalized:
+            return "signal_conflict", "high" if decision_action in {"buy", "sell"} else "medium"
+        if "company mappings are low-confidence" in normalized:
+            return "entity_mapping_low_confidence", "medium"
+        if "sentiment evidence lacks supporting company mappings" in normalized:
+            return "entity_mapping_missing", "medium"
+        return "recommendation_risk_flag", "low" if decision_action == "watch" else "medium"
 
     def _now_label(self) -> str:
         timezone = ZoneInfo(self.settings.market_timezone)
