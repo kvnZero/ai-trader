@@ -41,6 +41,19 @@ class BacktestEvaluationRow:
 
 
 @dataclass(frozen=True, slots=True)
+class BacktestBreakdownRow:
+    key: str
+    label: str
+    snapshot_count: int
+    evaluated_count: int
+    hit_count: int
+    hit_rate: float
+    average_forward_return_pct: float
+    average_max_runup_pct: float
+    average_max_drawdown_pct: float
+
+
+@dataclass(frozen=True, slots=True)
 class BacktestSummaryReport:
     generated_at: str
     snapshot_count: int
@@ -56,6 +69,8 @@ class BacktestSummaryReport:
     average_max_runup_pct: float
     average_max_drawdown_pct: float
     regime_counts: dict[str, int]
+    regime_breakdown: list[BacktestBreakdownRow] = field(default_factory=list)
+    action_breakdown: list[BacktestBreakdownRow] = field(default_factory=list)
     evaluations: list[BacktestEvaluationRow] = field(default_factory=list)
 
 
@@ -77,6 +92,8 @@ def build_backtest_summary_report(
     buy_sell_hit_count = 0
     conservative_evaluated_count = 0
     conservative_hit_count = 0
+    regime_groups: dict[str, list[BacktestEvaluationRow]] = {}
+    action_groups: dict[str, list[BacktestEvaluationRow]] = {}
 
     for snapshot in snapshots:
         snapshot_dt = _parse_snapshot_datetime(snapshot.created_at)
@@ -153,6 +170,9 @@ def build_backtest_summary_report(
                 conservative_hit=conservative_hit,
             )
         )
+        current_evaluation = evaluations[-1]
+        regime_groups.setdefault(regime_key, []).append(current_evaluation)
+        action_groups.setdefault(snapshot.recommendation, []).append(current_evaluation)
 
     timestamp = (generated_at or datetime.now(UTC)).isoformat(timespec="minutes")
     return BacktestSummaryReport(
@@ -178,6 +198,8 @@ def build_backtest_summary_report(
         average_max_runup_pct=round(_average(max_runups), 3),
         average_max_drawdown_pct=round(_average(max_drawdowns), 3),
         regime_counts=dict(sorted(regime_counts.items(), key=lambda item: (-item[1], item[0]))),
+        regime_breakdown=_build_breakdown_rows(regime_groups),
+        action_breakdown=_build_breakdown_rows(action_groups),
         evaluations=evaluations[:8],
     )
 
@@ -201,3 +223,35 @@ def _pct_change(base: float, target: float) -> float:
 
 def _average(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _build_breakdown_rows(groups: dict[str, list[BacktestEvaluationRow]]) -> list[BacktestBreakdownRow]:
+    rows: list[BacktestBreakdownRow] = []
+    for key, evaluations in groups.items():
+        hits = 0
+        for evaluation in evaluations:
+            if evaluation.directional_hit is True or evaluation.conservative_hit is True:
+                hits += 1
+        rows.append(
+            BacktestBreakdownRow(
+                key=key,
+                label=key,
+                snapshot_count=len(evaluations),
+                evaluated_count=len(evaluations),
+                hit_count=hits,
+                hit_rate=round(hits / len(evaluations), 3) if evaluations else 0.0,
+                average_forward_return_pct=round(
+                    _average([evaluation.forward_return_pct for evaluation in evaluations]),
+                    3,
+                ),
+                average_max_runup_pct=round(
+                    _average([evaluation.max_runup_pct for evaluation in evaluations]),
+                    3,
+                ),
+                average_max_drawdown_pct=round(
+                    _average([evaluation.max_drawdown_pct for evaluation in evaluations]),
+                    3,
+                ),
+            )
+        )
+    return sorted(rows, key=lambda row: (-row.snapshot_count, row.key))

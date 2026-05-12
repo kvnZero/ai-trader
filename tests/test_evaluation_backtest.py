@@ -59,6 +59,8 @@ class BacktestSummaryReportTests(TestCase):
         self.assertEqual(report.buy_sell_hit_count, 1)
         self.assertEqual(report.buy_sell_hit_rate, 1.0)
         self.assertEqual(report.average_forward_return_pct, 5.941)
+        self.assertEqual(len(report.regime_breakdown), 1)
+        self.assertEqual(len(report.action_breakdown), 1)
         self.assertEqual(len(report.evaluations), 1)
 
 
