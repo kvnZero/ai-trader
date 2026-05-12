@@ -170,6 +170,80 @@
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Replay</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">Snapshot Replay 摘要</h3>
+        </div>
+        <span class="rounded-full border border-sky-400/30 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-200">
+          {{ replay_report.snapshot_count }} 条 snapshot
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-4">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">覆盖标的</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ replay_report.symbol_coverage_count }}</p>
+          <p class="mt-1 text-sm text-slate-400">symbols</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">平均置信度</p>
+          <p class="mt-2 text-2xl font-semibold text-white">{{ "%.0f"|format(replay_report.average_confidence * 100) }}%</p>
+          <p class="mt-1 text-sm text-slate-400">{{ replay_report.latest_snapshot_at or "--" }}</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">BUY / SELL</p>
+          <p class="mt-2 text-2xl font-semibold text-emerald-200">{{ replay_report.action_counts.buy }}</p>
+          <p class="mt-1 text-sm text-slate-400">{{ replay_report.action_counts.sell }} sell</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">WATCH / AVOID</p>
+          <p class="mt-2 text-2xl font-semibold text-amber-200">{{ replay_report.action_counts.watch }}</p>
+          <p class="mt-1 text-sm text-slate-400">{{ replay_report.action_counts.avoid }} avoid</p>
+        </article>
+      </div>
+
+      <div class="mt-4 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Regime Mix</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            {% for regime, count in replay_report.regime_counts.items() %}
+              <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ regime }} · {{ count }}</span>
+            {% else %}
+              <span class="text-sm text-slate-400">暂无 snapshot regime 数据。</span>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Recent Snapshots</p>
+              <p class="mt-1 text-sm text-slate-400">后续 replay / backtest 将直接基于这些结构化快照扩展。</p>
+            </div>
+            <span class="text-xs text-slate-500">{{ replay_report.generated_at }}</span>
+          </div>
+          <div class="mt-4 space-y-3">
+            {% for snapshot in replay_report.snapshots %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <a href="{{ url_for('core.research', query=snapshot.symbol) }}" class="text-sm font-semibold text-white transition hover:text-sky-200">{{ snapshot.symbol }}</a>
+                  <span class="text-xs text-slate-500">{{ snapshot.created_at }}</span>
+                </div>
+                <p class="mt-2 text-sm text-slate-300">{{ snapshot.action }} · {{ snapshot.regime_label or snapshot.regime or "--" }} · {{ "%.0f"|format(snapshot.confidence * 100) }}%</p>
+                <p class="mt-2 text-sm leading-7 text-slate-400">sentiment {{ snapshot.sentiment_count }} / match {{ snapshot.company_match_count }} · {{ snapshot.source }}</p>
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-4 text-sm text-slate-400">
+                暂无 recommendation snapshot 数据。
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
           <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Sentiment Source Health</p>
           <h3 class="mt-2 text-2xl font-semibold text-white">舆情来源健康概览</h3>
         </div>
