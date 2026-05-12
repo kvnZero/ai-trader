@@ -12,6 +12,7 @@ from app.domain import CompanyReference, MarketSnapshot, SentimentItem
 from app.domain.serialization import to_json_ready
 from app.evaluation import (
     build_backtest_summary_report,
+    build_issue_timeline_report,
     build_recommendation_review_report,
     build_replay_summary_report,
     build_sample_evaluation_cases,
@@ -320,6 +321,7 @@ def system_capabilities() -> str:
     )
     replay_report = _build_replay_report(symbol=selected_symbol or None)
     backtest_report = _build_backtest_report(symbol=selected_symbol or None)
+    issue_report = _build_issue_timeline_report(symbol=selected_symbol or None)
     return render_template(
         "system.html",
         capabilities=capabilities,
@@ -334,6 +336,7 @@ def system_capabilities() -> str:
         evaluation_report=evaluation_report,
         replay_report=replay_report,
         backtest_report=backtest_report,
+        issue_report=issue_report,
         selected_symbol=selected_symbol,
         selected_kind=selected_kind,
         selected_limit=selected_limit,
@@ -404,6 +407,13 @@ def system_replay_api() -> tuple[object, int]:
 def system_backtest_api() -> tuple[object, int]:
     symbol = request.args.get("symbol", "").strip() or None
     payload = _build_backtest_report(symbol=symbol)
+    return jsonify(to_json_ready(payload)), 200
+
+
+@bp.get("/api/system/issues")
+def system_issues_api() -> tuple[object, int]:
+    symbol = request.args.get("symbol", "").strip() or None
+    payload = _build_issue_timeline_report(symbol=symbol)
     return jsonify(to_json_ready(payload)), 200
 
 
@@ -1756,6 +1766,43 @@ def _build_backtest_report(
         else []
     )
     return build_backtest_summary_report(snapshots=snapshots, market_data_service=market_service)
+
+
+def _build_issue_timeline_report(
+    *,
+    symbol: str | None = None,
+    limit: int = 12,
+):
+    sentiment_repository = current_app.config.get("TRADER_SENTIMENT_REPOSITORY")
+    snapshot_repository = current_app.config.get("TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY")
+    sentiment_worker_state = (
+        sentiment_repository.get_worker_state()
+        if sentiment_repository is not None and hasattr(sentiment_repository, "get_worker_state")
+        else None
+    )
+    latest_sentiment_run = (
+        sentiment_repository.get_latest_run()
+        if sentiment_repository is not None and hasattr(sentiment_repository, "get_latest_run")
+        else None
+    )
+    source_failures = (
+        sentiment_repository.list_source_failures(run_id=latest_sentiment_run.id)
+        if sentiment_repository is not None
+        and latest_sentiment_run is not None
+        and hasattr(sentiment_repository, "list_source_failures")
+        else []
+    )
+    snapshots = (
+        snapshot_repository.list_recent(limit=limit, symbol=symbol)
+        if snapshot_repository is not None and hasattr(snapshot_repository, "list_recent")
+        else []
+    )
+    return build_issue_timeline_report(
+        worker_state=sentiment_worker_state,
+        source_failures=source_failures,
+        snapshots=snapshots,
+        unread_alerts=_alert_repository().list_unread(),
+    )
 
 
 def _build_sentiment_summary(matched_sentiment: list[dict[str, object]]) -> dict[str, object]:
