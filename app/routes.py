@@ -59,6 +59,7 @@ _WEB_NAVIGATION = (
     {"endpoint": "core.research", "label": "个股研究", "description": "Research"},
     {"endpoint": "core.sentiment", "label": "舆情监控", "description": "Sentiment"},
     {"endpoint": "core.recommendations", "label": "交易员建议", "description": "Agent"},
+    {"endpoint": "core.issue_center", "label": "问题中心", "description": "Issues"},
     {"endpoint": "core.system_capabilities", "label": "系统能力", "description": "System"},
 )
 
@@ -288,6 +289,41 @@ def recommendations() -> str:
         event_watch=_build_market_event_watch(),
         navigation=_WEB_NAVIGATION,
         active_nav="core.recommendations",
+    )
+
+
+@bp.get("/issues")
+def issue_center() -> str:
+    settings = _settings()
+    selected_symbol = request.args.get("symbol", "").strip()
+    selected_issue_type = request.args.get("issue_type", "").strip()
+    selected_issue_severity = request.args.get("issue_severity", "").strip()
+    selected_issue_status = request.args.get("issue_status", "").strip()
+    selected_issue_limit = _get_positive_int_arg("issue_limit", default=20)
+    issue_report = _build_issue_timeline_report(
+        symbol=selected_symbol or None,
+        issue_type=selected_issue_type or None,
+        severity=selected_issue_severity or None,
+        status=selected_issue_status or None,
+        limit=selected_issue_limit,
+    )
+    worker_health = _build_worker_health_summary(
+        sentiment_latest_update=_build_sentiment_source_health_summary().get("checked_at"),
+        sentiment_mode="request",
+        sentiment_status="healthy",
+    )
+    return render_template(
+        "issues.html",
+        settings=settings,
+        issue_report=issue_report,
+        worker_health=worker_health,
+        selected_symbol=selected_symbol,
+        selected_issue_type=selected_issue_type,
+        selected_issue_severity=selected_issue_severity,
+        selected_issue_status=selected_issue_status,
+        selected_issue_limit=selected_issue_limit,
+        navigation=_WEB_NAVIGATION,
+        active_nav="core.issue_center",
     )
 
 
