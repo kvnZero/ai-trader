@@ -14,6 +14,7 @@ from app.persistence import (
 
 @dataclass(frozen=True, slots=True)
 class IssueTimelineEntry:
+    issue_id: int | None
     issue_type: str
     severity: str
     status: str
@@ -54,8 +55,9 @@ def build_issue_timeline_report(
         if worker_state is not None and worker_state.status in {"failed", "degraded"}:
             severity = "high" if worker_state.status == "failed" else "medium"
             items.append(
-                IssueTimelineEntry(
-                    issue_type="sentiment_worker_state",
+            IssueTimelineEntry(
+                issue_id=None,
+                issue_type="sentiment_worker_state",
                     severity=severity,
                     status="open",
                     symbol=None,
@@ -77,8 +79,9 @@ def build_issue_timeline_report(
 
         for failure in source_failures:
             items.append(
-                IssueTimelineEntry(
-                    issue_type="sentiment_source_failure",
+            IssueTimelineEntry(
+                issue_id=None,
+                issue_type="sentiment_source_failure",
                     severity="high" if not failure.retryable else "medium",
                     status="open",
                     symbol=None,
@@ -99,8 +102,9 @@ def build_issue_timeline_report(
             issue_type = "low_quality_signal" if snapshot.confidence < 0.4 else "conservative_signal"
             severity = "medium" if snapshot.confidence < 0.4 else "low"
             items.append(
-                IssueTimelineEntry(
-                    issue_type=issue_type,
+            IssueTimelineEntry(
+                issue_id=None,
+                issue_type=issue_type,
                     severity=severity,
                     status="open",
                     symbol=snapshot.symbol,
@@ -123,6 +127,7 @@ def build_issue_timeline_report(
             continue
         items.append(
             IssueTimelineEntry(
+                issue_id=None,
                 issue_type="unread_alert",
                 severity="high" if alert.level == "high" else "medium",
                 status="open",
@@ -164,6 +169,7 @@ def build_issue_timeline_report(
 
 def _ledger_row_to_entry(row: IssueLedgerRow) -> IssueTimelineEntry:
     return IssueTimelineEntry(
+        issue_id=row.id,
         issue_type=row.issue_type,
         severity=row.severity,
         status=row.status,

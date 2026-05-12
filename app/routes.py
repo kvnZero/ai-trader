@@ -417,6 +417,40 @@ def system_issues_api() -> tuple[object, int]:
     return jsonify(to_json_ready(payload)), 200
 
 
+@bp.post("/api/system/issues/<int:issue_id>/resolve")
+def system_issue_resolve_api(issue_id: int) -> tuple[object, int]:
+    repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
+    if repository is None or not hasattr(repository, "resolve_issue"):
+        return jsonify({"status": "unavailable", "issue_id": issue_id, "updated": False}), 503
+    updated = repository.resolve_issue(issue_id)
+    return jsonify({"status": "ok", "issue_id": issue_id, "updated": updated}), 200
+
+
+@bp.post("/api/system/issues/<int:issue_id>/ignore")
+def system_issue_ignore_api(issue_id: int) -> tuple[object, int]:
+    repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
+    if repository is None or not hasattr(repository, "ignore_issue"):
+        return jsonify({"status": "unavailable", "issue_id": issue_id, "updated": False}), 503
+    updated = repository.ignore_issue(issue_id)
+    return jsonify({"status": "ok", "issue_id": issue_id, "updated": updated}), 200
+
+
+@bp.post("/system/issues/<int:issue_id>/resolve")
+def system_issue_resolve(issue_id: int) -> str:
+    repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
+    if repository is not None and hasattr(repository, "resolve_issue"):
+        repository.resolve_issue(issue_id)
+    return redirect(request.referrer or url_for("core.system_capabilities"))
+
+
+@bp.post("/system/issues/<int:issue_id>/ignore")
+def system_issue_ignore(issue_id: int) -> str:
+    repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
+    if repository is not None and hasattr(repository, "ignore_issue"):
+        repository.ignore_issue(issue_id)
+    return redirect(request.referrer or url_for("core.system_capabilities"))
+
+
 @bp.get("/api/system/snapshots")
 def system_snapshots_api() -> tuple[object, int]:
     limit = _get_positive_int_arg("limit", default=20)

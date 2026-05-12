@@ -114,6 +114,7 @@ class IssueTimelineReportTests(TestCase):
 
         self.assertEqual(report.issue_count, 1)
         self.assertEqual(report.type_counts["sentiment_source_failure"], 1)
+        self.assertEqual(report.items[0].issue_id, 1)
         self.assertEqual(report.items[0].source, "36kr")
 
 
