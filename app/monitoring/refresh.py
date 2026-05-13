@@ -12,8 +12,10 @@ from app.modules.recommendation_engine import build_default_recommendation_engin
 from app.modules.sentiment_ingestion import build_default_sentiment_service
 from app.modules.technical_analysis import build_default_technical_analysis_service
 from app.monitoring.signal_lifecycle import LifecycleAssessment, assess_signal_lifecycle
+from app.monitoring.portfolio_risk import create_portfolio_risk_alert, create_portfolio_risk_issue
 from app.persistence.alerts import AlertRepository
 from app.persistence.issues import IssueLedgerRepository
+from app.persistence.portfolio_state import PortfolioHoldingRepository
 from app.persistence.recommendation_events import RecommendationEventRepository
 from app.persistence.recommendation_snapshots import RecommendationSnapshotRepository, RecommendationSnapshotRow
 from app.persistence.signal_lifecycle import SignalLifecycleRepository
@@ -62,6 +64,7 @@ class WatchlistRefreshService:
         self.recommendation_snapshot_repository = recommendation_snapshot_repository
         self.signal_lifecycle_repository = signal_lifecycle_repository
         self.sentiment_cache_reader = sentiment_cache_reader
+        self.holding_repository = PortfolioHoldingRepository(watchlist_repository.database)
         self.market_service = build_default_market_data_service()
         self.technical_service = build_default_technical_analysis_service()
         self.sentiment_service = build_default_sentiment_service()
@@ -436,6 +439,11 @@ class WatchlistRefreshService:
                     "signal_lifecycle_state": outcome.lifecycle_state,
                 },
             )
+        self._record_portfolio_risk_escalations(
+            row=row,
+            outcome=outcome,
+            source=source,
+        )
         if outcome.recommendation != previous_recommendation:
             self.recommendation_event_repository.create_event(
                 symbol=row.symbol,
@@ -578,6 +586,79 @@ class WatchlistRefreshService:
                     "risk_flag": risk_flag,
                 },
             )
+
+    def _record_portfolio_risk_escalations(
+        self,
+        *,
+        row: WatchlistRow,
+        outcome: RefreshOutcome,
+        source: str,
+    ) -> None:
+        held_row = self.holding_repository.get_row(row.symbol)
+        if held_row is None:
+            return
+
+        if outcome.lifecycle_state in {"invalidated", "expired"}:
+            summary = f"持仓信号进入 {outcome.lifecycle_state}：{outcome.lifecycle_reason}"
+            create_portfolio_risk_alert(
+                alert_repository=self.alert_repository,
+                symbol=row.symbol,
+                title=f"{row.name} 持仓信号风险",
+                summary=summary,
+                risk_type=f"portfolio_signal_{outcome.lifecycle_state}",
+                source="monitoring_worker",
+                level="high",
+            )
+            create_portfolio_risk_issue(
+                issue_repository=self.issue_repository,
+                symbol=row.symbol,
+                issue_type=f"portfolio_signal_{outcome.lifecycle_state}",
+                message=summary,
+                source=source,
+                origin_worker="monitoring_worker",
+                details={
+                    "recommendation": outcome.recommendation,
+                    "confidence": outcome.confidence,
+                    "lifecycle_reason": outcome.lifecycle_reason,
+                },
+                severity="high",
+            )
+
+        if self.issue_repository is None:
+            return
+        open_high_issues = self.issue_repository.list_recent(
+            symbol=row.symbol,
+            severity="high",
+            status="open",
+            limit=5,
+        )
+        if not open_high_issues:
+            return
+
+        issue_types = sorted({item.issue_type for item in open_high_issues})
+        summary = f"持仓标的存在 {len(open_high_issues)} 条高优先级未解决问题：{' / '.join(issue_types)}"
+        create_portfolio_risk_alert(
+            alert_repository=self.alert_repository,
+            symbol=row.symbol,
+            title=f"{row.name} 持仓高优问题未处理",
+            summary=summary,
+            risk_type=f"portfolio_open_high_issues:{','.join(issue_types)}",
+            source="monitoring_worker",
+            level="high",
+        )
+        create_portfolio_risk_issue(
+            issue_repository=self.issue_repository,
+            symbol=row.symbol,
+            issue_type="portfolio_open_high_issues",
+            message=summary,
+            source=source,
+            origin_worker="monitoring_worker",
+            details={
+                "issue_types": issue_types,
+                "open_high_issue_count": len(open_high_issues),
+            },
+            severity="high",
+        )
 
     def _classify_risk_flag_issue(self, risk_flag: str, decision_action: str) -> tuple[str, str]:
         normalized = risk_flag.lower()

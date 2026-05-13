@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 import akshare as ak
 
 from app.config import get_settings
-from app.persistence import AlertRepository, IssueLedgerRepository, MarketEventRepository, init_database
+from app.monitoring.portfolio_risk import create_portfolio_risk_alert, create_portfolio_risk_issue, is_held_symbol
+from app.persistence import AlertRepository, IssueLedgerRepository, MarketEventRepository, PortfolioHoldingRepository, init_database
 from app.workers.runtime import format_worker_log, install_shutdown_handlers, run_loop
 
 DEFAULT_INTERVAL_SECONDS = 1800
@@ -205,12 +206,54 @@ def _persist_high_priority_event_alerts(
     return created_count
 
 
+def _persist_portfolio_event_risk_alerts(
+    *,
+    holding_repository: PortfolioHoldingRepository,
+    alert_repository: AlertRepository,
+    issue_repository: IssueLedgerRepository,
+    events: list[dict[str, object]],
+) -> int:
+    created_count = 0
+    for event in events:
+        symbol = str(event.get("symbol") or "").strip()
+        if event.get("severity") != "high" or not is_held_symbol(holding_repository=holding_repository, symbol=symbol):
+            continue
+        summary = f"持仓标的出现高优先级事件：{_build_event_alert_summary(event)}"
+        created = create_portfolio_risk_alert(
+            alert_repository=alert_repository,
+            symbol=symbol,
+            title=f"{symbol} 持仓风险事件",
+            summary=summary,
+            risk_type=f"portfolio_market_event:{event['event_type']}:{event['event_date']}",
+            source="events_worker",
+            level="high",
+        )
+        create_portfolio_risk_issue(
+            issue_repository=issue_repository,
+            symbol=symbol,
+            issue_type="portfolio_market_event_high_risk",
+            message=summary,
+            source=str(event["source"]),
+            origin_worker="events_worker",
+            details={
+                "event_type": event["event_type"],
+                "event_date": event["event_date"],
+                **(event.get("details") or {}),
+            },
+            severity="high",
+        )
+        if created:
+            created_count += 1
+    return created_count
+
+
 def _run_once() -> dict[str, object]:
     settings = get_settings()
     database = init_database(settings.database_path)
     repository = MarketEventRepository(database)
     alert_repository = AlertRepository(database)
     issue_repository = IssueLedgerRepository(database)
+    holding_repository = PortfolioHoldingRepository(database)
     events = _collect_events()
     for event in events:
         repository.upsert_event(**event)
@@ -233,10 +276,17 @@ def _run_once() -> dict[str, object]:
         alert_repository=alert_repository,
         events=events,
     )
+    portfolio_alert_count = _persist_portfolio_event_risk_alerts(
+        holding_repository=holding_repository,
+        alert_repository=alert_repository,
+        issue_repository=issue_repository,
+        events=events,
+    )
     return {
         "event_count": len(events),
         "event_types": [event["event_type"] for event in events],
         "alert_count": alert_count,
+        "portfolio_alert_count": portfolio_alert_count,
         "tick_at": datetime.now(ZoneInfo(settings.market_timezone)).strftime("%Y-%m-%d %H:%M:%S"),
     }
 
