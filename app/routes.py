@@ -635,6 +635,29 @@ def system_capabilities() -> str:
         sentiment_status=sentiment_source_health.get("status", "healthy"),
     )
     portfolio_risk_overview = _build_portfolio_risk_overview()
+    account_state = _portfolio_account_state()
+    watchlist_rows = _watchlist_repository().list_rows()
+    portfolio_summary = build_portfolio_summary(
+        watchlist_rows=watchlist_rows,
+        company_dictionary=build_default_entity_mapping_service().company_dictionary,
+        settings=_portfolio_settings_repository().get_settings(),
+        account_state={
+            "cash_pct": account_state.get("cash_pct", 100.0),
+            "holdings": [
+                {
+                    "symbol": item["symbol"],
+                    "weight_pct": item.get("weight_pct", 0.0),
+                    "name": item.get("name"),
+                }
+                for item in account_state.get("holdings", [])
+            ],
+        },
+    )
+    portfolio_rebalance_playbook = _build_portfolio_rebalance_playbook(
+        account_state=account_state,
+        portfolio_summary=portfolio_summary,
+        portfolio_risk_overview=portfolio_risk_overview,
+    )
     evaluation_report = _build_evaluation_report(
         symbol=selected_symbol or None,
         recent_runs=recent_runs,
@@ -660,6 +683,7 @@ def system_capabilities() -> str:
         sentiment_source_health=sentiment_source_health,
         worker_health=worker_health,
         portfolio_risk_overview=_to_template_namespace(portfolio_risk_overview),
+        portfolio_rebalance_playbook=_to_template_namespace(portfolio_rebalance_playbook),
         evaluation_report=evaluation_report,
         replay_report=replay_report,
         backtest_report=backtest_report,

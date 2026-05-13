@@ -191,6 +191,55 @@
       </div>
     </section>
 
+    <section class="rounded-[2rem] border border-sky-400/20 bg-sky-300/5 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-sky-200/80">Rebalance Playbook</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">调仓动作清单</h3>
+        </div>
+        <span class="rounded-full border border-sky-400/30 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-100">
+          {{ workspace.portfolio_rebalance_playbook.actions|length }} 项
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3">
+        {% for item in workspace.portfolio_rebalance_playbook.actions %}
+          <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="text-sm font-semibold text-white">{{ item.symbol }}</p>
+                <p class="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{{ item.action_label }} · 优先级 {{ item.priority }}</p>
+              </div>
+              <span class="rounded-full {% if item.action == 'trim_reduce' %}bg-rose-300/15 text-rose-200{% elif item.action == 'buy_add' %}bg-emerald-300/15 text-emerald-200{% elif item.action == 'hold_monitor' %}bg-amber-300/15 text-amber-200{% else %}bg-slate-300/10 text-slate-300{% endif %} px-3 py-1 text-xs font-medium uppercase tracking-[0.16em]">
+                {{ item.action_label }}
+              </span>
+            </div>
+            <div class="mt-3 grid gap-3 sm:grid-cols-3">
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3">
+                <p class="text-xs uppercase tracking-[0.16em] text-slate-500">当前权重</p>
+                <p class="mt-2 text-lg font-semibold text-white">{{ item.current_weight }}%</p>
+              </div>
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3">
+                <p class="text-xs uppercase tracking-[0.16em] text-slate-500">Target Delta</p>
+                <p class="mt-2 text-lg font-semibold {% if item.target_delta < 0 %}text-rose-200{% elif item.target_delta > 0 %}text-emerald-200{% else %}text-slate-200{% endif %}">
+                  {% if item.target_delta > 0 %}+{% endif %}{{ item.target_delta }}%
+                </p>
+              </div>
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3">
+                <p class="text-xs uppercase tracking-[0.16em] text-slate-500">生成时间</p>
+                <p class="mt-2 text-lg font-semibold text-white">{{ workspace.portfolio_rebalance_playbook.generated_at }}</p>
+              </div>
+            </div>
+            <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.reason }}</p>
+          </article>
+        {% else %}
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+            当前没有可执行的调仓动作。
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>

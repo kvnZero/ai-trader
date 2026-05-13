@@ -68,6 +68,7 @@ class PortfolioWebViewTests(TestCase):
             self.assertIn("当前持仓与现金", body)
             self.assertIn("当前账户状态如何影响建议仓位", body)
             self.assertIn("当前持仓优先处理项", body)
+            self.assertIn("调仓动作清单", body)
             self.assertIn("Cash Balance", body)
             self.assertIn("120000.0", body)
             self.assertIn("600519 已有持仓已覆盖目标仓位，本次不新增。", body)
@@ -127,7 +128,9 @@ class PortfolioWebViewTests(TestCase):
             self.assertEqual(response.status_code, 200)
             body = response.get_data(as_text=True)
             self.assertIn("持仓风险只读摘要", body)
+            self.assertIn("调仓动作只读摘要", body)
             self.assertIn("去 recommendations 处理", body)
+            self.assertIn("去 recommendations 查看清单", body)
             self.assertIn("600519", body)
 
     def test_account_state_form_persists_to_repositories_and_redirects(self) -> None:
