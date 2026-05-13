@@ -212,6 +212,20 @@ SCHEMA_STATEMENTS = (
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS signal_lifecycle (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'created' CHECK (
+            status IN ('created', 'active', 'confirmed', 'weakened', 'invalidated', 'expired')
+        ),
+        reason TEXT NOT NULL DEFAULT '',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_signal_at TEXT NOT NULL
+    )
+    """,
 )
 
 
@@ -226,6 +240,7 @@ class Database:
                 conn.execute(statement)
             self._ensure_alert_columns(conn)
             self._ensure_issue_ledger_columns(conn)
+            self._ensure_signal_lifecycle_indexes(conn)
             conn.commit()
 
     def _ensure_alert_columns(self, conn: sqlite3.Connection) -> None:
@@ -255,6 +270,20 @@ class Database:
         for column_name, statement in column_statements:
             if column_name not in columns:
                 conn.execute(statement)
+
+    def _ensure_signal_lifecycle_indexes(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_signal_lifecycle_status_last_signal
+            ON signal_lifecycle(status, last_signal_at DESC)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_signal_lifecycle_last_signal
+            ON signal_lifecycle(last_signal_at DESC)
+            """
+        )
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:

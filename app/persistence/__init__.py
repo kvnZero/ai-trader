@@ -20,6 +20,12 @@ from app.persistence.sentiment import (
     SentimentSourceRunRow,
     SentimentWorkerStateRow,
 )
+from app.persistence.signal_lifecycle import (
+    ALLOWED_SIGNAL_LIFECYCLE_STATUSES,
+    SignalLifecycleRepository,
+    SignalLifecycleRow,
+    SignalLifecycleUpsert,
+)
 
 __all__ = [
     "AlertRepository",
@@ -32,6 +38,10 @@ __all__ = [
     "SentimentSourceFailureRow",
     "SentimentSourceRunRow",
     "SentimentWorkerStateRow",
+    "ALLOWED_SIGNAL_LIFECYCLE_STATUSES",
+    "SignalLifecycleRepository",
+    "SignalLifecycleRow",
+    "SignalLifecycleUpsert",
     "RecommendationEventRepository",
     "RecommendationEventRow",
     "IssueLedgerRepository",
