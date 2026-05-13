@@ -236,6 +236,58 @@
     </section>
 
     <section class="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+      <article class="rounded-[2rem] border border-sky-400/20 bg-sky-300/5 p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-sky-200/80">Lifecycle Overview</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">当前信号生命周期</h3>
+          </div>
+          <span class="rounded-full border border-sky-400/30 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-100">
+            {{ workspace.signal_lifecycle.item_count }} 条
+          </span>
+        </div>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">建议切换</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ workspace.signal_lifecycle.state_counts.changed }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">保守观察</p>
+            <p class="mt-2 text-2xl font-semibold text-amber-200">{{ workspace.signal_lifecycle.state_counts.conservative }}</p>
+          </div>
+          <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+            <p class="text-xs uppercase tracking-[0.18em] text-slate-500">待刷新 / 关闭</p>
+            <p class="mt-2 text-2xl font-semibold text-white">{{ workspace.signal_lifecycle.state_counts.stale + workspace.signal_lifecycle.state_counts.disabled }}</p>
+          </div>
+        </div>
+
+        <div class="mt-4 space-y-3">
+          {% for item in workspace.signal_lifecycle.items %}
+            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-white">{{ item.name }}</p>
+                  <p class="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
+                    <a href="{{ url_for('core.research', query=item.symbol) }}" class="transition hover:text-sky-200">{{ item.symbol }}</a>
+                    · {{ item.state_label }}
+                  </p>
+                </div>
+                <div class="text-right">
+                  <p class="text-sm font-semibold text-white">{{ item.current_action_label or "--" }}</p>
+                  <p class="mt-1 text-xs text-slate-500">{{ item.last_updated_at or "--" }}</p>
+                </div>
+              </div>
+              <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.reason_summary }}</p>
+            </article>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+              当前没有可展示的 signal lifecycle 状态。
+            </div>
+          {% endfor %}
+        </div>
+      </article>
+
       <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
         <div class="flex items-center justify-between gap-4">
           <div>

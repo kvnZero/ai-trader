@@ -55,6 +55,14 @@ _ACTIVITY_KIND_LABELS = {
     "research": "研究动作",
     "other": "其他历史",
 }
+_SIGNAL_LIFECYCLE_LABELS = {
+    "created": "新建信号",
+    "active": "持续跟踪",
+    "confirmed": "确认中",
+    "weakened": "信号减弱",
+    "invalidated": "信号失效",
+    "expired": "信号过期",
+}
 
 _WEB_NAVIGATION = (
     {"endpoint": "core.dashboard", "label": "总览", "description": "Dashboard"},
@@ -95,8 +103,16 @@ def _monitoring_scheduler():
     return current_app.config["TRADER_MONITORING_SCHEDULER"]
 
 
+def _signal_lifecycle_repository():
+    return current_app.config.get("TRADER_SIGNAL_LIFECYCLE_REPOSITORY")
+
+
 def _embedded_monitoring_enabled() -> bool:
     return bool(current_app.config.get("TRADER_EMBEDDED_MONITORING_ENABLED", False))
+
+
+def _watchlist_refresh_service():
+    return current_app.config["TRADER_WATCHLIST_REFRESH_SERVICE"]
 
 
 def _build_sentiment_sources(symbols: list[str] | None = None):
@@ -323,6 +339,31 @@ def recommendations() -> str:
         navigation=_WEB_NAVIGATION,
         active_nav="core.recommendations",
     )
+
+
+@bp.get("/api/recommendations/lifecycle")
+def recommendation_lifecycle_api() -> tuple[object, int]:
+    symbol = request.args.get("symbol", "").strip() or None
+    limit = _get_positive_int_arg("limit", default=6)
+
+    if symbol is not None:
+        payload = {
+            "status": "ok",
+            "symbol": symbol,
+            "lifecycle": _build_signal_lifecycle_view_model(symbol),
+        }
+        return jsonify(to_json_ready(payload)), 200
+
+    payload = _build_signal_lifecycle_workspace(limit=limit)
+    return jsonify(
+        to_json_ready(
+            {
+                "status": "ok",
+                "symbol": None,
+                **payload,
+            }
+        )
+    ), 200
 
 
 @bp.post("/recommendations/portfolio-settings")
@@ -831,6 +872,7 @@ def _build_recommendations_workspace() -> dict[str, object]:
     alerts, alert_summary = _build_alert_view_models()
     recommendation_events = _build_recommendation_event_history(limit=6)
     recent_activity = _build_recent_activity(limit=6)
+    lifecycle_workspace = _build_signal_lifecycle_workspace(rows=watchlist_rows, limit=4)
     portfolio_settings = _portfolio_settings_repository().get_settings()
     portfolio_summary = build_portfolio_summary(
         watchlist_rows=watchlist_rows,
@@ -867,6 +909,7 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "portfolio_settings": portfolio_settings,
         "portfolio_summary": portfolio_summary,
         "market_event_context": market_event_context,
+        "signal_lifecycle": lifecycle_workspace,
     }
 
 
@@ -1565,6 +1608,178 @@ def _build_research_recent_activity_summary(target: dict[str, object]) -> dict[s
     }
 
 
+def _build_signal_lifecycle_workspace(
+    *,
+    rows: list[object] | None = None,
+    limit: int = 6,
+) -> dict[str, object]:
+    lifecycle_repository = _signal_lifecycle_repository()
+    watchlist_rows = rows if rows is not None else _watchlist_repository().list_rows()
+    watchlist_by_symbol = {row.symbol: row for row in watchlist_rows}
+
+    items: list[dict[str, object]] = []
+    if lifecycle_repository is not None and hasattr(lifecycle_repository, "list_rows"):
+        lifecycle_rows = lifecycle_repository.list_rows(limit=limit)
+        for row in lifecycle_rows:
+            items.append(
+                _build_signal_lifecycle_view_model(
+                    row.symbol,
+                    watchlist_row=watchlist_by_symbol.get(row.symbol),
+                )
+            )
+
+    if not items:
+        items = [
+            _build_signal_lifecycle_view_model(row.symbol, watchlist_row=row)
+            for row in watchlist_rows[:limit]
+        ]
+
+    state_counts = {
+        "tracking": 0,
+        "changed": 0,
+        "conservative": 0,
+        "stale": 0,
+        "disabled": 0,
+        "untracked": 0,
+    }
+    for item in items:
+        state = str(item["state"])
+        if state in state_counts:
+            state_counts[state] += 1
+
+    latest_updated_at = next((item["last_updated_at"] for item in items if item["last_updated_at"]), None)
+    return {
+        "item_count": len(items),
+        "latest_updated_at": latest_updated_at,
+        "state_counts": state_counts,
+        "items": items,
+    }
+
+
+def _build_signal_lifecycle_view_model(
+    symbol: str,
+    *,
+    watchlist_row: object | None = None,
+) -> dict[str, object]:
+    watchlist_entry = watchlist_row or _watchlist_repository().get_row(symbol)
+    lifecycle_repository = _signal_lifecycle_repository()
+    lifecycle_row = None
+    if lifecycle_repository is not None and hasattr(lifecycle_repository, "get"):
+        lifecycle_row = lifecycle_repository.get(symbol)
+    recommendation_events = _build_recommendation_event_history(symbol, limit=2)
+    recent_activity = _build_recent_activity(symbol, limit=3)
+    latest_event = recommendation_events[0] if recommendation_events else None
+    latest_activity = recent_activity[0] if recent_activity else None
+
+    if watchlist_entry is None:
+        return {
+            "symbol": symbol,
+            "name": symbol,
+            "state": "untracked",
+            "state_label": "未纳入关注",
+            "current_action": latest_event["current_action"] if latest_event else None,
+            "current_action_label": _ACTION_LABELS.get(
+                latest_event["current_action"],
+                str(latest_event["current_action"]).upper(),
+            ) if latest_event else None,
+            "confidence": latest_event["confidence"] if latest_event else None,
+            "reason_summary": (
+                latest_event["summary"]
+                if latest_event
+                else "当前标的不在 watchlist，生命周期状态还未纳入持续跟踪。"
+            ),
+            "last_updated_at": (
+                latest_event["created_at"]
+                if latest_event
+                else (latest_activity["created_at"] if latest_activity else None)
+            ),
+            "latest_event": latest_event,
+            "latest_activity": _build_lifecycle_activity_summary(latest_activity),
+        }
+
+    state = "tracking"
+    state_label = "持续跟踪"
+    reason_summary = watchlist_entry.latest_reason or "已纳入 watchlist，等待新的分析或建议变化。"
+    last_updated_at = None
+
+    if lifecycle_row is not None:
+        state = _map_signal_lifecycle_status(str(lifecycle_row.status))
+        state_label = _SIGNAL_LIFECYCLE_LABELS.get(str(lifecycle_row.status), "生命周期")
+        reason_summary = lifecycle_row.reason or reason_summary
+        last_updated_at = lifecycle_row.updated_at or lifecycle_row.last_signal_at
+
+    if lifecycle_row is None and not watchlist_entry.monitoring_enabled:
+        state = "disabled"
+        state_label = "监控关闭"
+        reason_summary = watchlist_entry.latest_reason or "当前标的已加入关注，但监控开关处于关闭状态。"
+    elif lifecycle_row is None and latest_activity is not None and bool(latest_activity["stale"]):
+        state = "stale"
+        state_label = "待刷新"
+        reason_summary = latest_activity["detail"] or reason_summary
+    elif lifecycle_row is None and (
+        latest_event is not None
+        and latest_event["previous_action"]
+        and latest_event["previous_action"] != latest_event["current_action"]
+    ):
+        state = "changed"
+        state_label = "建议切换"
+        reason_summary = latest_event["summary"] or reason_summary
+    elif lifecycle_row is None and watchlist_entry.latest_recommendation in {"watch", "avoid"}:
+        state = "conservative"
+        state_label = "保守观察"
+
+    if not last_updated_at:
+        last_updated_at = (
+            latest_event["created_at"]
+            if latest_event
+            else (
+                watchlist_entry.last_analysis_at
+                or (latest_activity["created_at"] if latest_activity else None)
+            )
+        )
+
+    return {
+        "symbol": watchlist_entry.symbol,
+        "name": watchlist_entry.name,
+        "state": state,
+        "state_label": state_label,
+        "current_action": watchlist_entry.latest_recommendation,
+        "current_action_label": _ACTION_LABELS.get(
+            watchlist_entry.latest_recommendation,
+            watchlist_entry.latest_recommendation.upper(),
+        ),
+        "confidence": f"{watchlist_entry.latest_confidence:.0%}",
+        "reason_summary": reason_summary,
+        "last_updated_at": str(last_updated_at).replace("T", " ") if last_updated_at else None,
+        "latest_event": latest_event,
+        "latest_activity": _build_lifecycle_activity_summary(latest_activity),
+    }
+
+
+def _map_signal_lifecycle_status(status: str) -> str:
+    return {
+        "created": "tracking",
+        "active": "tracking",
+        "confirmed": "changed",
+        "weakened": "conservative",
+        "invalidated": "stale",
+        "expired": "disabled",
+    }.get(status, "tracking")
+
+
+def _build_lifecycle_activity_summary(item: dict[str, object] | None) -> dict[str, object] | None:
+    if item is None:
+        return None
+
+    return {
+        "status": item["status"],
+        "status_label": _ACTIVITY_KIND_LABELS[_normalize_activity_kind(item["status"])],
+        "detail": item["detail"],
+        "created_at": str(item["created_at"]).replace("T", " "),
+        "stale": bool(item["stale"]),
+    }
+
+
 def _empty_research_recent_activity_summary() -> dict[str, object]:
     return {
         "available": False,
@@ -1606,52 +1821,8 @@ def _refresh_watchlist_item(symbol: str) -> bool:
     resolved_symbol = target["symbol"]
     if resolved_symbol is None:
         return False
-
-    market_service = build_default_market_data_service()
-    snapshot_result = market_service.get_latest_snapshot(str(resolved_symbol))
-    market_state = "active" if snapshot_result.data is not None else "paused"
-    market_label = "监控中" if snapshot_result.data is not None else "等待开市"
-
-    if snapshot_result.data is None:
-        recommendation = "watch"
-        confidence = 0.0
-        reason = "实时行情暂时不可用，保留最近一次建议。"
-    else:
-        bars_result = market_service.get_daily_bars(
-            str(resolved_symbol),
-            start_date=date.today() - timedelta(days=180),
-            end_date=date.today(),
-            limit=90,
-        )
-        technical_result = None
-        if bars_result.data:
-            try:
-                technical_result = build_default_technical_analysis_service().analyze_bars(bars_result.data)
-            except TechnicalAnalysisValidationError:
-                technical_result = None
-
-        if technical_result is None:
-            recommendation = "watch"
-            confidence = 0.35
-            reason = "技术分析不可用，建议继续观察。"
-        else:
-            recommendation = "buy" if technical_result.bullish_score >= technical_result.bearish_score else "watch"
-            confidence = max(technical_result.bullish_score, technical_result.bearish_score)
-            reason = (
-                technical_result.signals[0].summary
-                if technical_result.signals
-                else "基于当前技术结构的默认刷新结果。"
-            )
-
-    return _watchlist_repository().record_refresh(
-        str(resolved_symbol),
-        latest_recommendation=recommendation,
-        latest_confidence=confidence,
-        latest_reason=reason,
-        status=market_state,
-        status_label=market_label,
-        last_analysis_at=datetime.now(ZoneInfo(_settings().market_timezone)).strftime("%H:%M"),
-    )
+    outcome = _watchlist_refresh_service().refresh_symbol(str(resolved_symbol), source="manual")
+    return outcome is not None
 
 
 def _build_monitoring_context() -> dict[str, object]:
@@ -1732,6 +1903,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
         "mapping": _empty_mapping_summary(),
         "recommendation": _empty_recommendation_summary(),
         "recent_activity": _empty_research_recent_activity_summary(),
+        "signal_lifecycle": None,
         "recommendation_events": [],
         "sentiment_source_health": None,
         "sentiment_runtime": {
@@ -1753,6 +1925,7 @@ def _build_research_workspace(query: str) -> dict[str, object]:
 
     symbol = str(target["symbol"])
     workspace["recent_activity"] = _build_research_recent_activity_summary(target)
+    workspace["signal_lifecycle"] = _build_signal_lifecycle_view_model(symbol)
     workspace["recommendation_events"] = _build_recommendation_event_history(symbol, limit=3)
     market_service = build_default_market_data_service()
     snapshot_result = market_service.get_latest_snapshot(symbol)
