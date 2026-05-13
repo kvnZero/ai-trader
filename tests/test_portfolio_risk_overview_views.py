@@ -110,17 +110,17 @@ class PortfolioRiskOverviewWorkspaceTests(TestCase):
                 workspace = _build_recommendations_workspace()
 
             overview = workspace["portfolio_risk_overview"]
-            self.assertEqual(overview["held_symbol_count"], 1)
-            self.assertEqual(overview["action_counts"]["reduce"], 1)
-            self.assertEqual(overview["high_risk_count"], 1)
-            self.assertEqual(len(overview["items"]), 1)
-            self.assertEqual(overview["items"][0]["symbol"], "600519")
-            self.assertEqual(overview["items"][0]["portfolio_action"], "reduce")
-            self.assertEqual(overview["items"][0]["current_action"], "buy")
-            self.assertEqual(overview["items"][0]["current_confidence"], "66%")
-            self.assertEqual(overview["items"][0]["high_severity_event_count"], 1)
-            self.assertEqual(overview["items"][0]["open_high_issue_count"], 1)
-            self.assertEqual(overview["items"][0]["lifecycle_status"], "weakened")
+            self.assertEqual(overview.held_symbol_count, 1)
+            self.assertEqual(overview.action_counts.reduce, 1)
+            self.assertEqual(overview.high_risk_count, 1)
+            self.assertEqual(len(overview.items), 1)
+            self.assertEqual(overview.items[0].symbol, "600519")
+            self.assertEqual(overview.items[0].portfolio_action, "reduce")
+            self.assertEqual(overview.items[0].current_action, "buy")
+            self.assertEqual(overview.items[0].current_confidence, "66%")
+            self.assertEqual(overview.items[0].high_severity_event_count, 1)
+            self.assertEqual(overview.items[0].open_high_issue_count, 1)
+            self.assertEqual(overview.items[0].lifecycle_status, "weakened")
 
 
 if __name__ == "__main__":
