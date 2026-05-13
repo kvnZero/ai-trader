@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 from app.persistence.db import Database
@@ -100,14 +101,60 @@ class AlertRepository:
             conn.commit()
         return cursor.rowcount
 
-    def create_alert(self, *, symbol: str, title: str, summary: str, level: str = "medium") -> bool:
+    def create_alert(
+        self,
+        *,
+        symbol: str,
+        title: str,
+        summary: str,
+        level: str = "medium",
+        dedupe_key: str | None = None,
+    ) -> bool:
         with self.database.connection() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO alerts (symbol, title, summary, level, unread)
-                VALUES (?, ?, ?, ?, 1)
+                INSERT OR IGNORE INTO alerts (symbol, title, summary, dedupe_key, level, unread)
+                VALUES (?, ?, ?, ?, ?, 1)
                 """,
-                (symbol, title, summary, level),
+                (symbol, title, summary, dedupe_key, level),
             )
             conn.commit()
         return cursor.rowcount > 0
+
+    def create_market_event_alert(
+        self,
+        *,
+        symbol: str,
+        title: str,
+        summary: str,
+        level: str,
+        event_type: str,
+        event_date: str,
+        source: str,
+    ) -> bool:
+        return self.create_alert(
+            symbol=symbol,
+            title=title,
+            summary=summary,
+            level=level,
+            dedupe_key=self._build_market_event_dedupe_key(
+                symbol=symbol,
+                title=title,
+                event_type=event_type,
+                event_date=event_date,
+                source=source,
+            ),
+        )
+
+    def _build_market_event_dedupe_key(
+        self,
+        *,
+        symbol: str,
+        title: str,
+        event_type: str,
+        event_date: str,
+        source: str,
+    ) -> str:
+        return hashlib.sha256(
+            "|".join([symbol, title, event_type, event_date, source]).encode("utf-8")
+        ).hexdigest()

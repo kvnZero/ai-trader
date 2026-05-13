@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import akshare as ak
 
 from app.config import get_settings
-from app.persistence import IssueLedgerRepository, MarketEventRepository, init_database
+from app.persistence import AlertRepository, IssueLedgerRepository, MarketEventRepository, init_database
 from app.workers.runtime import format_worker_log, install_shutdown_handlers, run_loop
 
 DEFAULT_INTERVAL_SECONDS = 1800
@@ -169,10 +169,47 @@ def _normalize_event_date(value: object, now: datetime) -> str:
     return text or now.date().isoformat()
 
 
+def _build_event_alert_summary(event: dict[str, object]) -> str:
+    details = dict(event.get("details") or {})
+    summary_parts = [str(details[key]).strip() for key in ("detail", "resume_date", "suspend_date") if details.get(key)]
+    if event.get("event_date"):
+        summary_parts.append(f"事件日期 {event['event_date']}")
+    if event.get("event_type"):
+        summary_parts.append(f"类型 {event['event_type']}")
+    return "；".join(part for part in summary_parts if part) or str(event["title"])
+
+
+def _persist_high_priority_event_alerts(
+    *,
+    alert_repository: AlertRepository,
+    events: list[dict[str, object]],
+) -> int:
+    created_count = 0
+    for event in events:
+        if event.get("severity") != "high":
+            continue
+        symbol = str(event.get("symbol") or "").strip()
+        if not symbol:
+            continue
+        created = alert_repository.create_market_event_alert(
+            symbol=symbol,
+            title=str(event["title"]),
+            summary=_build_event_alert_summary(event),
+            level="high",
+            event_type=str(event["event_type"]),
+            event_date=str(event["event_date"]),
+            source=str(event["source"]),
+        )
+        if created:
+            created_count += 1
+    return created_count
+
+
 def _run_once() -> dict[str, object]:
     settings = get_settings()
     database = init_database(settings.database_path)
     repository = MarketEventRepository(database)
+    alert_repository = AlertRepository(database)
     issue_repository = IssueLedgerRepository(database)
     events = _collect_events()
     for event in events:
@@ -192,9 +229,14 @@ def _run_once() -> dict[str, object]:
                     **(event.get("details") or {}),
                 },
             )
+    alert_count = _persist_high_priority_event_alerts(
+        alert_repository=alert_repository,
+        events=events,
+    )
     return {
         "event_count": len(events),
         "event_types": [event["event_type"] for event in events],
+        "alert_count": alert_count,
         "tick_at": datetime.now(ZoneInfo(settings.market_timezone)).strftime("%Y-%m-%d %H:%M:%S"),
     }
 

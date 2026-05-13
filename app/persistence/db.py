@@ -31,6 +31,7 @@ SCHEMA_STATEMENTS = (
         symbol TEXT NOT NULL,
         title TEXT NOT NULL,
         summary TEXT NOT NULL,
+        dedupe_key TEXT,
         level TEXT NOT NULL DEFAULT 'medium',
         unread INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -223,8 +224,20 @@ class Database:
         with self.connection() as conn:
             for statement in SCHEMA_STATEMENTS:
                 conn.execute(statement)
+            self._ensure_alert_columns(conn)
             self._ensure_issue_ledger_columns(conn)
             conn.commit()
+
+    def _ensure_alert_columns(self, conn: sqlite3.Connection) -> None:
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(alerts)").fetchall()
+        }
+        if "dedupe_key" not in columns:
+            conn.execute("ALTER TABLE alerts ADD COLUMN dedupe_key TEXT")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_alerts_dedupe_key ON alerts(dedupe_key) WHERE dedupe_key IS NOT NULL"
+        )
 
     def _ensure_issue_ledger_columns(self, conn: sqlite3.Connection) -> None:
         columns = {
