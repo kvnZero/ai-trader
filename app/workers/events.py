@@ -9,8 +9,25 @@ from zoneinfo import ZoneInfo
 import akshare as ak
 
 from app.config import get_settings
-from app.monitoring.portfolio_risk import create_portfolio_risk_alert, create_portfolio_risk_issue, is_held_symbol
-from app.persistence import AlertRepository, IssueLedgerRepository, MarketEventRepository, PortfolioHoldingRepository, init_database
+from app.monitoring.portfolio_risk import (
+    create_portfolio_risk_alert,
+    create_portfolio_risk_issue,
+    emit_portfolio_rebalance_risk,
+    is_held_symbol,
+)
+from app.persistence import (
+    AlertRepository,
+    IssueLedgerRepository,
+    MarketEventRepository,
+    PortfolioHoldingRepository,
+    RecommendationSnapshotRepository,
+    SignalLifecycleRepository,
+    init_database,
+)
+from app.portfolio import build_portfolio_risk_overview, build_portfolio_summary
+from app.modules.entity_mapping import build_default_entity_mapping_service
+from app.persistence.portfolio import PortfolioSettingsRepository
+from app.persistence.portfolio_state import DEFAULT_CASH_ACCOUNT_KEY, PortfolioCashRepository
 from app.workers.runtime import format_worker_log, install_shutdown_handlers, run_loop
 
 DEFAULT_INTERVAL_SECONDS = 1800
@@ -247,6 +264,30 @@ def _persist_portfolio_event_risk_alerts(
     return created_count
 
 
+def _build_account_state(
+    *,
+    holding_repository: PortfolioHoldingRepository,
+    database,
+) -> dict[str, object]:
+    holdings = holding_repository.list_rows()
+    total_market_value = sum((row.market_value or row.cost_basis) for row in holdings)
+    cash_row = PortfolioCashRepository(database).get_balance(DEFAULT_CASH_ACCOUNT_KEY)
+    cash_balance = float(cash_row.balance) if cash_row is not None else 0.0
+    net_liquidation_value = total_market_value + cash_balance
+    cash_pct = 100.0 if net_liquidation_value <= 0 else round((cash_balance / net_liquidation_value) * 100, 2)
+    return {
+        "cash_pct": cash_pct,
+        "holdings": [
+            {
+                "symbol": row.symbol,
+                "weight_pct": 0.0 if net_liquidation_value <= 0 else round(((row.market_value or row.cost_basis) / net_liquidation_value) * 100, 2),
+                "name": row.name,
+            }
+            for row in holdings
+        ],
+    }
+
+
 def _run_once() -> dict[str, object]:
     settings = get_settings()
     database = init_database(settings.database_path)
@@ -254,6 +295,8 @@ def _run_once() -> dict[str, object]:
     alert_repository = AlertRepository(database)
     issue_repository = IssueLedgerRepository(database)
     holding_repository = PortfolioHoldingRepository(database)
+    snapshot_repository = RecommendationSnapshotRepository(database)
+    lifecycle_repository = SignalLifecycleRepository(database)
     events = _collect_events()
     for event in events:
         repository.upsert_event(**event)
@@ -282,11 +325,44 @@ def _run_once() -> dict[str, object]:
         issue_repository=issue_repository,
         events=events,
     )
+    account_state = _build_account_state(
+        holding_repository=holding_repository,
+        database=database,
+    )
+    portfolio_risk_overview = build_portfolio_risk_overview(
+        holding_repository=holding_repository,
+        market_event_repository=repository,
+        signal_lifecycle_repository=lifecycle_repository,
+        issue_repository=issue_repository,
+        recommendation_snapshot_repository=snapshot_repository,
+    )
+    portfolio_summary = build_portfolio_summary(
+        watchlist_rows=[],
+        company_dictionary=build_default_entity_mapping_service().company_dictionary,
+        settings=PortfolioSettingsRepository(database).get_settings(),
+        account_state=account_state,
+    )
+    rebalance_alert_count = 0
+    for holding in holding_repository.list_rows():
+        created = emit_portfolio_rebalance_risk(
+            alert_repository=alert_repository,
+            issue_repository=issue_repository,
+            symbol=holding.symbol,
+            name=holding.name,
+            account_state=account_state,
+            portfolio_summary=portfolio_summary,
+            portfolio_risk_overview=portfolio_risk_overview,
+            source="events_worker",
+            origin_worker="events_worker",
+        )
+        if created:
+            rebalance_alert_count += 1
     return {
         "event_count": len(events),
         "event_types": [event["event_type"] for event in events],
         "alert_count": alert_count,
         "portfolio_alert_count": portfolio_alert_count,
+        "rebalance_alert_count": rebalance_alert_count,
         "tick_at": datetime.now(ZoneInfo(settings.market_timezone)).strftime("%Y-%m-%d %H:%M:%S"),
     }
 

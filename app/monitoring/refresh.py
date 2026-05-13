@@ -12,7 +12,11 @@ from app.modules.recommendation_engine import build_default_recommendation_engin
 from app.modules.sentiment_ingestion import build_default_sentiment_service
 from app.modules.technical_analysis import build_default_technical_analysis_service
 from app.monitoring.signal_lifecycle import LifecycleAssessment, assess_signal_lifecycle
-from app.monitoring.portfolio_risk import create_portfolio_risk_alert, create_portfolio_risk_issue
+from app.monitoring.portfolio_risk import (
+    create_portfolio_risk_alert,
+    create_portfolio_risk_issue,
+    emit_portfolio_rebalance_risk,
+)
 from app.persistence.alerts import AlertRepository
 from app.persistence.issues import IssueLedgerRepository
 from app.persistence.portfolio_state import PortfolioHoldingRepository
@@ -20,6 +24,7 @@ from app.persistence.recommendation_events import RecommendationEventRepository
 from app.persistence.recommendation_snapshots import RecommendationSnapshotRepository, RecommendationSnapshotRow
 from app.persistence.signal_lifecycle import SignalLifecycleRepository
 from app.persistence.watchlist import WatchlistRepository, WatchlistRow
+from app.portfolio import build_portfolio_risk_overview
 
 
 @dataclass(frozen=True, slots=True)
@@ -633,31 +638,55 @@ class WatchlistRefreshService:
             limit=5,
         )
         if not open_high_issues:
-            return
+            open_high_issue_count = 0
+        else:
+            open_high_issue_count = len(open_high_issues)
 
-        issue_types = sorted({item.issue_type for item in open_high_issues})
-        summary = f"持仓标的存在 {len(open_high_issues)} 条高优先级未解决问题：{' / '.join(issue_types)}"
-        create_portfolio_risk_alert(
-            alert_repository=self.alert_repository,
-            symbol=row.symbol,
-            title=f"{row.name} 持仓高优问题未处理",
-            summary=summary,
-            risk_type=f"portfolio_open_high_issues:{','.join(issue_types)}",
-            source="monitoring_worker",
-            level="high",
+        if open_high_issue_count > 0:
+            issue_types = sorted({item.issue_type for item in open_high_issues})
+            summary = f"持仓标的存在 {open_high_issue_count} 条高优先级未解决问题：{' / '.join(issue_types)}"
+            create_portfolio_risk_alert(
+                alert_repository=self.alert_repository,
+                symbol=row.symbol,
+                title=f"{row.name} 持仓高优问题未处理",
+                summary=summary,
+                risk_type=f"portfolio_open_high_issues:{','.join(issue_types)}",
+                source="monitoring_worker",
+                level="high",
+            )
+            create_portfolio_risk_issue(
+                issue_repository=self.issue_repository,
+                symbol=row.symbol,
+                issue_type="portfolio_open_high_issues",
+                message=summary,
+                source=source,
+                origin_worker="monitoring_worker",
+                details={
+                    "issue_types": issue_types,
+                    "open_high_issue_count": open_high_issue_count,
+                },
+                severity="high",
+            )
+
+        account_state = self._build_portfolio_account_state()
+        portfolio_risk_overview = build_portfolio_risk_overview(
+            holding_repository=self.holding_repository,
+            market_event_repository=self.market_event_repository,
+            signal_lifecycle_repository=self.signal_lifecycle_repository,
+            issue_repository=self.issue_repository,
+            recommendation_snapshot_repository=self.recommendation_snapshot_repository,
         )
-        create_portfolio_risk_issue(
+        portfolio_summary = self._build_portfolio_summary(account_state)
+        emit_portfolio_rebalance_risk(
+            alert_repository=self.alert_repository,
             issue_repository=self.issue_repository,
             symbol=row.symbol,
-            issue_type="portfolio_open_high_issues",
-            message=summary,
-            source=source,
+            name=row.name,
+            account_state=account_state,
+            portfolio_summary=portfolio_summary,
+            portfolio_risk_overview=portfolio_risk_overview,
+            source="monitoring_worker",
             origin_worker="monitoring_worker",
-            details={
-                "issue_types": issue_types,
-                "open_high_issue_count": len(open_high_issues),
-            },
-            severity="high",
         )
 
     def _classify_risk_flag_issue(self, risk_flag: str, decision_action: str) -> tuple[str, str]:
@@ -678,6 +707,52 @@ class WatchlistRefreshService:
         if "sentiment evidence lacks supporting company mappings" in normalized:
             return "entity_mapping_missing", "medium"
         return "recommendation_risk_flag", "low" if decision_action == "watch" else "medium"
+
+    @property
+    def market_event_repository(self):
+        repository = getattr(self, "_market_event_repository", None)
+        if repository is None:
+            from app.persistence.events import MarketEventRepository
+
+            repository = MarketEventRepository(self.watchlist_repository.database)
+            self._market_event_repository = repository
+        return repository
+
+    def _build_portfolio_account_state(self) -> dict[str, object]:
+        holdings = self.holding_repository.list_rows()
+        total_market_value = sum((row.market_value or row.cost_basis) for row in holdings)
+        cash_balance = 0.0
+        from app.persistence.portfolio_state import DEFAULT_CASH_ACCOUNT_KEY, PortfolioCashRepository
+
+        cash_row = PortfolioCashRepository(self.watchlist_repository.database).get_balance(DEFAULT_CASH_ACCOUNT_KEY)
+        if cash_row is not None:
+            cash_balance = float(cash_row.balance)
+        net_liquidation_value = total_market_value + cash_balance
+        cash_pct = 100.0 if net_liquidation_value <= 0 else round((cash_balance / net_liquidation_value) * 100, 2)
+        return {
+            "cash_pct": cash_pct,
+            "holdings": [
+                {
+                    "symbol": row.symbol,
+                    "weight_pct": 0.0 if net_liquidation_value <= 0 else round(((row.market_value or row.cost_basis) / net_liquidation_value) * 100, 2),
+                    "name": row.name,
+                }
+                for row in holdings
+            ],
+        }
+
+    def _build_portfolio_summary(self, account_state: dict[str, object]):
+        from app.modules.entity_mapping import build_default_entity_mapping_service
+        from app.persistence.portfolio import PortfolioSettingsRepository
+        from app.portfolio import build_portfolio_summary
+
+        settings = PortfolioSettingsRepository(self.watchlist_repository.database).get_settings()
+        return build_portfolio_summary(
+            watchlist_rows=self.watchlist_repository.list_rows(),
+            company_dictionary=build_default_entity_mapping_service().company_dictionary,
+            settings=settings,
+            account_state=account_state,
+        )
 
     def _now_label(self) -> str:
         timezone = ZoneInfo(self.settings.market_timezone)

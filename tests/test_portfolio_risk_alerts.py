@@ -6,16 +6,24 @@ from unittest import TestCase
 
 from app.config import Settings
 from app.monitoring.refresh import RefreshOutcome, WatchlistRefreshService
+from app.monitoring.portfolio_risk import emit_portfolio_rebalance_risk
 from app.persistence import (
     AlertRepository,
     IssueLedgerRepository,
+    MarketEventRepository,
+    PortfolioCashRepository,
     PortfolioHoldingRepository,
+    PortfolioSettingsRepository,
+    RecommendationSnapshotRepository,
+    SignalLifecycleRepository,
     RecommendationEventRepository,
     WatchlistRepository,
     init_database,
 )
 from app.persistence.watchlist import WatchlistRow
 from app.workers.events import _persist_portfolio_event_risk_alerts
+from app.portfolio import build_portfolio_risk_overview, build_portfolio_summary
+from app.modules.entity_mapping import build_default_entity_mapping_service
 
 
 class PortfolioRiskAlertTests(TestCase):
@@ -130,6 +138,83 @@ class PortfolioRiskAlertTests(TestCase):
             self.assertTrue(any("持仓高优问题未处理" in item.title for item in alerts))
             self.assertTrue(any(item.issue_type == "portfolio_signal_invalidated" for item in issues))
             self.assertTrue(any(item.issue_type == "portfolio_open_high_issues" for item in issues))
+
+    def test_emits_rebalance_alert_for_high_priority_trim_reduce_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            database = init_database(str(Path(tmpdir) / "portfolio-rebalance-risk.db"))
+            holding_repository = PortfolioHoldingRepository(database)
+            cash_repository = PortfolioCashRepository(database)
+            event_repository = RecommendationSnapshotRepository(database)
+            lifecycle_repository = SignalLifecycleRepository(database)
+            issue_repository = IssueLedgerRepository(database)
+            alert_repository = AlertRepository(database)
+
+            holding_repository.upsert_holding(
+                symbol="300750",
+                name="宁德时代",
+                shares=100,
+                avg_cost=220.0,
+                last_price=230.0,
+            )
+            cash_repository.upsert_balance(balance=50000.0)
+            lifecycle_repository.upsert(
+                symbol="300750",
+                status="invalidated",
+                reason="主信号失效",
+                signal_at="2026-05-13T10:10:00",
+                updated_at="2026-05-13T10:10:00",
+                created_at="2026-05-13T09:50:00",
+            )
+            event_repository.create_snapshot(
+                symbol="300750",
+                source="scheduled",
+                recommendation="watch",
+                confidence=0.51,
+                market_regime="range",
+                market_regime_label="震荡",
+                confirmation_score=0.42,
+                sentiment_count=2,
+                company_match_count=1,
+                turnover=900000.0,
+                reason="等待修复",
+                created_at="2026-05-13T10:11",
+            )
+
+            account_state = {
+                "cash_pct": 68.49,
+                "holdings": [{"symbol": "300750", "weight_pct": 31.51, "name": "宁德时代"}],
+            }
+            portfolio_summary = build_portfolio_summary(
+                watchlist_rows=[],
+                company_dictionary=build_default_entity_mapping_service().company_dictionary,
+                settings=PortfolioSettingsRepository(database).get_settings(),
+                account_state=account_state,
+            )
+            portfolio_risk_overview = build_portfolio_risk_overview(
+                holding_repository=holding_repository,
+                market_event_repository=MarketEventRepository(database),
+                signal_lifecycle_repository=lifecycle_repository,
+                issue_repository=issue_repository,
+                recommendation_snapshot_repository=event_repository,
+            )
+
+            created = emit_portfolio_rebalance_risk(
+                alert_repository=alert_repository,
+                issue_repository=issue_repository,
+                symbol="300750",
+                name="宁德时代",
+                account_state=account_state,
+                portfolio_summary=portfolio_summary,
+                portfolio_risk_overview=portfolio_risk_overview,
+                source="monitoring_worker",
+                origin_worker="monitoring_worker",
+            )
+
+            alerts = alert_repository.list_unread()
+            issues = issue_repository.list_recent(limit=10, symbol="300750")
+            self.assertTrue(created)
+            self.assertTrue(any("持仓调仓提醒" in item.title for item in alerts))
+            self.assertTrue(any(item.issue_type == "portfolio_rebalance_high_priority" for item in issues))
 
 
 if __name__ == "__main__":
