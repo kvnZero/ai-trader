@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import akshare as ak
 
 from app.config import get_settings
-from app.persistence import MarketEventRepository, init_database
+from app.persistence import IssueLedgerRepository, MarketEventRepository, init_database
 from app.workers.runtime import format_worker_log, install_shutdown_handlers, run_loop
 
 DEFAULT_INTERVAL_SECONDS = 1800
@@ -173,9 +173,25 @@ def _run_once() -> dict[str, object]:
     settings = get_settings()
     database = init_database(settings.database_path)
     repository = MarketEventRepository(database)
+    issue_repository = IssueLedgerRepository(database)
     events = _collect_events()
     for event in events:
         repository.upsert_event(**event)
+        if event["severity"] == "high":
+            issue_repository.create_issue(
+                issue_type="market_event_high_severity",
+                severity="high",
+                status="open",
+                symbol=event["symbol"],
+                source=event["source"],
+                origin_worker="events_worker",
+                message=event["title"],
+                details={
+                    "event_type": event["event_type"],
+                    "event_date": event["event_date"],
+                    **(event.get("details") or {}),
+                },
+            )
     return {
         "event_count": len(events),
         "event_types": [event["event_type"] for event in events],
