@@ -11,10 +11,12 @@ from app.modules.market_data import build_default_market_data_service
 from app.modules.recommendation_engine import build_default_recommendation_engine_service
 from app.modules.sentiment_ingestion import build_default_sentiment_service
 from app.modules.technical_analysis import build_default_technical_analysis_service
+from app.monitoring.signal_lifecycle import LifecycleAssessment, assess_signal_lifecycle
 from app.persistence.alerts import AlertRepository
 from app.persistence.issues import IssueLedgerRepository
 from app.persistence.recommendation_events import RecommendationEventRepository
-from app.persistence.recommendation_snapshots import RecommendationSnapshotRepository
+from app.persistence.recommendation_snapshots import RecommendationSnapshotRepository, RecommendationSnapshotRow
+from app.persistence.signal_lifecycle import SignalLifecycleRepository
 from app.persistence.watchlist import WatchlistRepository, WatchlistRow
 
 
@@ -25,6 +27,8 @@ class RefreshOutcome:
     recommendation: str
     confidence: float
     reason: str
+    lifecycle_state: str
+    lifecycle_reason: str
     status: str
     status_label: str
     analysis_at: str
@@ -47,6 +51,7 @@ class WatchlistRefreshService:
         issue_repository: IssueLedgerRepository | None = None,
         recommendation_event_repository: RecommendationEventRepository,
         recommendation_snapshot_repository: RecommendationSnapshotRepository | None = None,
+        signal_lifecycle_repository: SignalLifecycleRepository | None = None,
         sentiment_cache_reader: object | None = None,
     ):
         self.settings = settings
@@ -55,6 +60,7 @@ class WatchlistRefreshService:
         self.issue_repository = issue_repository
         self.recommendation_event_repository = recommendation_event_repository
         self.recommendation_snapshot_repository = recommendation_snapshot_repository
+        self.signal_lifecycle_repository = signal_lifecycle_repository
         self.sentiment_cache_reader = sentiment_cache_reader
         self.market_service = build_default_market_data_service()
         self.technical_service = build_default_technical_analysis_service()
@@ -80,6 +86,8 @@ class WatchlistRefreshService:
                 recommendation=target_row.latest_recommendation,
                 confidence=target_row.latest_confidence,
                 reason="刷新间隔过短，已跳过重复分析。",
+                lifecycle_state="active",
+                lifecycle_reason="未触发新分析，沿用当前信号生命周期状态。",
                 status=target_row.status,
                 status_label=target_row.status_label,
                 analysis_at=self._now_label(),
@@ -102,18 +110,35 @@ class WatchlistRefreshService:
     def _refresh_row(self, row: WatchlistRow, *, source: str) -> RefreshOutcome:
         snapshot_result = self.market_service.get_latest_snapshot(row.symbol)
         previous_recommendation = row.latest_recommendation
+        previous_snapshot = self._latest_snapshot(row.symbol)
 
         if snapshot_result.data is None:
+            lifecycle = self._build_lifecycle_assessment(
+                previous_snapshot=previous_snapshot,
+                previous_recommendation=previous_recommendation,
+                recommendation=previous_recommendation,
+                confidence=row.latest_confidence,
+                confirmation_score=None,
+                source=source,
+                reason="实时行情暂时不可用，保留最近一次建议。",
+            )
             outcome = RefreshOutcome(
                 symbol=row.symbol,
                 changed=False,
                 recommendation=previous_recommendation,
                 confidence=0.0,
                 reason="实时行情暂时不可用，保留最近一次建议。",
+                lifecycle_state=lifecycle.state,
+                lifecycle_reason=lifecycle.reason,
                 status="paused",
                 status_label="等待开市",
                 analysis_at=self._now_label(),
                 alert_created=False,
+                source=source,
+            )
+            self._persist_signal_lifecycle(
+                symbol=row.symbol,
+                outcome=outcome,
                 source=source,
             )
             self.watchlist_repository.record_analysis_run(
@@ -139,12 +164,23 @@ class WatchlistRefreshService:
         )
         if not bars_result.data:
             reason = "缺少足够K线数据，建议继续观察。"
+            lifecycle = self._build_lifecycle_assessment(
+                previous_snapshot=previous_snapshot,
+                previous_recommendation=previous_recommendation,
+                recommendation="watch",
+                confidence=0.35,
+                confirmation_score=None,
+                source=source,
+                reason=reason,
+            )
             outcome = RefreshOutcome(
                 symbol=row.symbol,
                 changed=False,
                 recommendation="watch",
                 confidence=0.35,
                 reason=reason,
+                lifecycle_state=lifecycle.state,
+                lifecycle_reason=lifecycle.reason,
                 status="active",
                 status_label="监控中",
                 analysis_at=self._now_label(),
@@ -285,12 +321,23 @@ class WatchlistRefreshService:
                 decision_confidence=bundle.decision_trace.final_confidence,
             )
 
+        lifecycle = self._build_lifecycle_assessment(
+            previous_snapshot=previous_snapshot,
+            previous_recommendation=previous_recommendation,
+            recommendation=recommendation,
+            confidence=confidence,
+            confirmation_score=analysis_result.confirmation_score,
+            source=source,
+            reason=reason,
+        )
         outcome = RefreshOutcome(
             symbol=row.symbol,
             changed=recommendation != previous_recommendation,
             recommendation=recommendation,
             confidence=confidence,
             reason=reason,
+            lifecycle_state=lifecycle.state,
+            lifecycle_reason=lifecycle.reason,
             status="active",
             status_label="监控中",
             analysis_at=self._now_label(),
@@ -325,11 +372,12 @@ class WatchlistRefreshService:
         company_match_count: int,
         turnover: float | None,
     ) -> None:
+        persisted_reason = self._compose_persisted_reason(outcome)
         self.watchlist_repository.record_refresh(
             row.symbol,
             latest_recommendation=outcome.recommendation,
             latest_confidence=outcome.confidence,
-            latest_reason=outcome.reason,
+            latest_reason=persisted_reason,
             status=outcome.status,
             status_label=outcome.status_label,
             last_analysis_at=outcome.analysis_at,
@@ -338,7 +386,7 @@ class WatchlistRefreshService:
             row.symbol,
             status=source,
             stale=False,
-            detail=outcome.reason,
+            detail=persisted_reason,
         )
         if self.recommendation_snapshot_repository is not None:
             self.recommendation_snapshot_repository.create_snapshot(
@@ -352,9 +400,14 @@ class WatchlistRefreshService:
                 sentiment_count=sentiment_count,
                 company_match_count=company_match_count,
                 turnover=turnover,
-                reason=outcome.reason,
+                reason=persisted_reason,
                 created_at=datetime.now(UTC).isoformat(timespec="minutes"),
             )
+        self._persist_signal_lifecycle(
+            symbol=row.symbol,
+            outcome=outcome,
+            source=source,
+        )
         if outcome.changed:
             self._record_issue(
                 issue_type="recommendation_change",
@@ -366,6 +419,21 @@ class WatchlistRefreshService:
                     "previous_recommendation": previous_recommendation,
                     "current_recommendation": outcome.recommendation,
                     "confidence": outcome.confidence,
+                    "signal_lifecycle_state": outcome.lifecycle_state,
+                    "signal_lifecycle_reason": outcome.lifecycle_reason,
+                },
+            )
+        if outcome.lifecycle_state in {"invalidated", "expired", "weakened"}:
+            self._record_issue(
+                issue_type=f"signal_{outcome.lifecycle_state}",
+                severity="medium" if outcome.lifecycle_state != "weakened" else "low",
+                symbol=row.symbol,
+                message=outcome.lifecycle_reason,
+                details={
+                    "source": source,
+                    "recommendation": outcome.recommendation,
+                    "confidence": outcome.confidence,
+                    "signal_lifecycle_state": outcome.lifecycle_state,
                 },
             )
         if outcome.recommendation != previous_recommendation:
@@ -374,12 +442,12 @@ class WatchlistRefreshService:
                 previous_action=previous_recommendation,
                 current_action=outcome.recommendation,
                 confidence=outcome.confidence,
-                summary=outcome.reason,
+                summary=persisted_reason,
             )
             self.alert_repository.create_alert(
                 symbol=row.symbol,
                 title=f"{row.name}建议从 {previous_recommendation.upper()} 调整为 {outcome.recommendation.upper()}",
-                summary=outcome.reason,
+                summary=persisted_reason,
                 level="high" if outcome.recommendation in {"buy", "sell"} else "medium",
             )
 
@@ -404,6 +472,65 @@ class WatchlistRefreshService:
             items = payload.get("items")
             return list(items) if isinstance(items, list) else []
         return list(getattr(payload, "items", []) or [])
+
+    def _latest_snapshot(self, symbol: str) -> RecommendationSnapshotRow | None:
+        if self.recommendation_snapshot_repository is None:
+            return None
+        rows = self.recommendation_snapshot_repository.list_recent(limit=1, symbol=symbol)
+        return rows[0] if rows else None
+
+    def _build_lifecycle_assessment(
+        self,
+        *,
+        previous_snapshot: RecommendationSnapshotRow | None,
+        previous_recommendation: str | None,
+        recommendation: str,
+        confidence: float,
+        confirmation_score: float | None,
+        source: str,
+        reason: str,
+    ) -> LifecycleAssessment:
+        return assess_signal_lifecycle(
+            previous_snapshot=previous_snapshot,
+            previous_recommendation=previous_recommendation,
+            current_recommendation=recommendation,
+            confidence=confidence,
+            confirmation_score=confirmation_score,
+            source=source,
+            reason=reason,
+        )
+
+    def _compose_persisted_reason(self, outcome: RefreshOutcome) -> str:
+        return (
+            f"[signal:{outcome.lifecycle_state}] {outcome.lifecycle_reason} "
+            f"| recommendation: {outcome.reason}"
+        )
+
+    def _persist_signal_lifecycle(
+        self,
+        *,
+        symbol: str,
+        outcome: RefreshOutcome,
+        source: str,
+    ) -> None:
+        if self.signal_lifecycle_repository is None:
+            return
+
+        signal_at = datetime.now(UTC).isoformat(timespec="minutes")
+        self.signal_lifecycle_repository.upsert(
+            symbol=symbol,
+            status=outcome.lifecycle_state,
+            reason=outcome.lifecycle_reason,
+            metadata={
+                "source": source,
+                "recommendation": outcome.recommendation,
+                "confidence": outcome.confidence,
+                "status": outcome.status,
+                "analysis_at": outcome.analysis_at,
+            },
+            signal_at=signal_at,
+            updated_at=signal_at,
+        )
 
     def _record_issue(
         self,

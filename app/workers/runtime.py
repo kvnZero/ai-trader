@@ -16,6 +16,7 @@ from app.persistence import (
     IssueLedgerRepository,
     RecommendationEventRepository,
     RecommendationSnapshotRepository,
+    SignalLifecycleRepository,
     SentimentRepository,
     WatchlistRepository,
     init_database,
@@ -31,6 +32,7 @@ class WorkerRuntime:
     alert_repository: AlertRepository
     issue_repository: IssueLedgerRepository
     recommendation_event_repository: RecommendationEventRepository
+    signal_lifecycle_repository: SignalLifecycleRepository
     refresh_service: WatchlistRefreshService
 
 
@@ -67,6 +69,7 @@ def build_worker_runtime(*, settings: Settings | None = None) -> WorkerRuntime:
     issue_repository = IssueLedgerRepository(database)
     recommendation_event_repository = RecommendationEventRepository(database)
     recommendation_snapshot_repository = RecommendationSnapshotRepository(database)
+    signal_lifecycle_repository = SignalLifecycleRepository(database)
     sentiment_repository = SentimentRepository(database, issue_repository=issue_repository)
     refresh_service = WatchlistRefreshService(
         settings=resolved_settings,
@@ -74,6 +77,7 @@ def build_worker_runtime(*, settings: Settings | None = None) -> WorkerRuntime:
         alert_repository=alert_repository,
         recommendation_event_repository=recommendation_event_repository,
         recommendation_snapshot_repository=recommendation_snapshot_repository,
+        signal_lifecycle_repository=signal_lifecycle_repository,
         issue_repository=issue_repository,
         sentiment_cache_reader=sentiment_repository,
     )
@@ -87,6 +91,7 @@ def build_worker_runtime(*, settings: Settings | None = None) -> WorkerRuntime:
         alert_repository=alert_repository,
         issue_repository=issue_repository,
         recommendation_event_repository=recommendation_event_repository,
+        signal_lifecycle_repository=signal_lifecycle_repository,
         refresh_service=refresh_service,
     )
 
