@@ -848,6 +848,9 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "watch": len([row for row in watchlist_rows if row.latest_recommendation == "watch"]),
         "avoid": len([row for row in watchlist_rows if row.latest_recommendation == "avoid"]),
     }
+    market_event_context = _build_recommendation_market_event_context(
+        watchlist_rows=watchlist_rows
+    )
     return {
         "watchlist_count": len(watchlist_rows),
         "enabled_count": len([row for row in watchlist_rows if row.monitoring_enabled]),
@@ -863,6 +866,7 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "alerts": alerts,
         "portfolio_settings": portfolio_settings,
         "portfolio_summary": portfolio_summary,
+        "market_event_context": market_event_context,
     }
 
 
@@ -1239,6 +1243,220 @@ def _build_market_event_watch() -> list[dict[str, object]]:
         )
 
     return events[:4]
+
+
+def _build_recommendation_market_event_context(
+    *,
+    watchlist_rows: list[object],
+) -> dict[str, object]:
+    repository = current_app.config.get("TRADER_MARKET_EVENT_REPOSITORY")
+    if repository is None:
+        return {
+            "has_events": False,
+            "high_priority_count": 0,
+            "related_event_count": 0,
+            "high_priority_events": [],
+            "symbol_summaries": [],
+            "risk_highlights": [],
+        }
+
+    selected_rows = sorted(
+        watchlist_rows,
+        key=lambda row: (
+            not row.monitoring_enabled,
+            _recommendation_action_rank(row.latest_recommendation),
+            -row.latest_confidence,
+            row.symbol,
+        ),
+    )[:6]
+
+    symbol_summaries: list[dict[str, object]] = []
+    high_priority_events: list[dict[str, object]] = []
+    risk_highlights: list[dict[str, object]] = []
+
+    for row in selected_rows:
+        merged_events = _list_recommendation_related_market_events(
+            repository=repository,
+            symbol=row.symbol,
+            limit=3,
+        )
+        if not merged_events:
+            continue
+
+        severity_counts = {"high": 0, "medium": 0, "low": 0}
+        upcoming_count = 0
+        for event in merged_events:
+            severity = str(event["level"])
+            if severity in severity_counts:
+                severity_counts[severity] += 1
+            if event["timing"] == "upcoming":
+                upcoming_count += 1
+            if severity == "high" and len(high_priority_events) < 8:
+                high_priority_events.append(
+                    {
+                        **event,
+                        "recommendation": row.latest_recommendation,
+                        "recommendation_label": _ACTION_LABELS.get(
+                            row.latest_recommendation,
+                            row.latest_recommendation.upper(),
+                        ),
+                        "name": row.name,
+                    }
+                )
+
+        risk_notes = _build_market_event_risk_notes(
+            recommendation=row.latest_recommendation,
+            confidence=row.latest_confidence,
+            events=merged_events,
+        )
+        if risk_notes:
+            risk_highlights.append(
+                {
+                    "symbol": row.symbol,
+                    "name": row.name,
+                    "recommendation": row.latest_recommendation,
+                    "recommendation_label": _ACTION_LABELS.get(
+                        row.latest_recommendation,
+                        row.latest_recommendation.upper(),
+                    ),
+                    "risk_notes": risk_notes,
+                }
+            )
+
+        symbol_summaries.append(
+            {
+                "symbol": row.symbol,
+                "name": row.name,
+                "recommendation": row.latest_recommendation,
+                "recommendation_label": _ACTION_LABELS.get(
+                    row.latest_recommendation,
+                    row.latest_recommendation.upper(),
+                ),
+                "confidence": f"{row.latest_confidence:.0%}",
+                "event_count": len(merged_events),
+                "upcoming_count": upcoming_count,
+                "highest_severity": _highest_market_event_severity(merged_events),
+                "latest_event_date": merged_events[0]["event_date"],
+                "latest_event_title": merged_events[0]["title"],
+                "events": merged_events[:3],
+                "risk_notes": risk_notes[:2],
+                "high_count": severity_counts["high"],
+            }
+        )
+
+    high_priority_events.sort(
+        key=lambda item: (
+            _market_event_severity_rank(str(item["level"])),
+            str(item["event_date"]),
+            str(item["symbol"]),
+        )
+    )
+    symbol_summaries.sort(
+        key=lambda item: (
+            _market_event_severity_rank(str(item["highest_severity"])),
+            -int(item["event_count"]),
+            str(item["symbol"]),
+        )
+    )
+
+    return {
+        "has_events": bool(symbol_summaries),
+        "high_priority_count": len(high_priority_events),
+        "related_event_count": sum(int(item["event_count"]) for item in symbol_summaries),
+        "high_priority_events": high_priority_events[:4],
+        "symbol_summaries": symbol_summaries[:4],
+        "risk_highlights": risk_highlights[:4],
+    }
+
+
+def _list_recommendation_related_market_events(
+    *,
+    repository: MarketEventRepository,
+    symbol: str,
+    limit: int,
+) -> list[dict[str, object]]:
+    upcoming_rows = repository.list_upcoming(limit=limit, symbol=symbol)
+    recent_rows = repository.list_recent(limit=limit, symbol=symbol)
+    merged: list[dict[str, object]] = []
+    seen: set[tuple[str | None, str, str, str]] = set()
+
+    for timing, rows in (("upcoming", upcoming_rows), ("recent", recent_rows)):
+        for row in rows:
+            event_key = (row.symbol, row.title, row.event_type, row.event_date)
+            if event_key in seen:
+                continue
+            seen.add(event_key)
+            merged.append(
+                {
+                    "symbol": row.symbol or symbol,
+                    "title": row.title,
+                    "event_type": row.event_type,
+                    "level": row.severity,
+                    "event_date": row.event_date,
+                    "source": row.source,
+                    "detail": _market_event_detail_text(row),
+                    "timing": timing,
+                }
+            )
+
+    merged.sort(
+        key=lambda item: (
+            _market_event_severity_rank(str(item["level"])),
+            0 if item["timing"] == "upcoming" else 1,
+            str(item["event_date"]),
+        )
+    )
+    return merged[:limit]
+
+
+def _market_event_detail_text(row: object) -> str:
+    details = getattr(row, "details", {}) or {}
+    if isinstance(details, dict):
+        for key in ("summary", "detail", "message", "reason", "status"):
+            value = details.get(key)
+            if value:
+                return str(value)
+    return f"{row.event_type} · {row.source}"
+
+
+def _build_market_event_risk_notes(
+    *,
+    recommendation: str,
+    confidence: float,
+    events: list[dict[str, object]],
+) -> list[str]:
+    notes: list[str] = []
+    high_events = [event for event in events if event["level"] == "high"]
+    upcoming_events = [event for event in events if event["timing"] == "upcoming"]
+    if high_events and recommendation in {"buy", "sell"}:
+        notes.append("高优先级事件尚未落地，方向性建议需要等待事件兑现。")
+    elif high_events:
+        notes.append("高优先级事件较多，当前更适合保留观察而非扩大敞口。")
+
+    if upcoming_events and confidence < 0.6:
+        notes.append("未来事件临近且建议置信度一般，需防止事件前后的再定价。")
+
+    event_types = {str(event["event_type"]) for event in events}
+    if "recommendation_change" in event_types:
+        notes.append("近期建议切换与事件共振，需回看是否属于一次性噪音。")
+    if "earnings" in event_types or "results" in event_types:
+        notes.append("财报类事件会放大利润预期差，仓位与止损应更保守。")
+
+    return notes[:3]
+
+
+def _highest_market_event_severity(events: list[dict[str, object]]) -> str:
+    if not events:
+        return "low"
+    return min(events, key=lambda item: _market_event_severity_rank(str(item["level"])))["level"]
+
+
+def _market_event_severity_rank(level: str) -> int:
+    return {"high": 0, "medium": 1, "low": 2}.get(level, 3)
+
+
+def _recommendation_action_rank(action: str) -> int:
+    return {"buy": 0, "sell": 1, "watch": 2, "avoid": 3}.get(action, 4)
 
 
 def _build_recommendation_event_history(

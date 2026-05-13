@@ -35,6 +35,80 @@
       </article>
     </section>
 
+    <section class="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+      <article class="rounded-[2rem] border border-rose-400/20 bg-rose-300/5 p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-rose-200/80">Event Linked Risks</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">高优先级事件</h3>
+          </div>
+          <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium text-rose-100">
+            {{ workspace.market_event_context.high_priority_count }} 条
+          </span>
+        </div>
+        <div class="mt-4 space-y-3">
+          {% for event in workspace.market_event_context.high_priority_events %}
+            <article class="rounded-3xl border border-rose-400/20 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-white">
+                    <a href="{{ url_for('core.research', query=event.symbol) }}" class="transition hover:text-sky-200">{{ event.symbol }}</a>
+                    · {{ event.title }}
+                  </p>
+                  <p class="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
+                    {{ event.recommendation_label }} · {{ event.event_type }} · {{ event.event_date }}
+                  </p>
+                </div>
+                <span class="rounded-full bg-rose-300/15 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-rose-200">
+                  {{ event.level }}
+                </span>
+              </div>
+              <p class="mt-3 text-sm leading-7 text-rose-50/90">{{ event.detail }}</p>
+            </article>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+              当前没有与建议直接相关的高优先级持久化事件。
+            </div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="rounded-[2rem] border border-amber-400/20 bg-amber-300/5 p-6">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-amber-200/80">Recommendation Risks</p>
+            <h3 class="mt-2 text-2xl font-semibold text-white">事件驱动风险提示</h3>
+          </div>
+          <span class="rounded-full border border-amber-400/30 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-100">
+            {{ workspace.market_event_context.related_event_count }} 条关联事件
+          </span>
+        </div>
+        <div class="mt-4 space-y-3">
+          {% for item in workspace.market_event_context.risk_highlights %}
+            <article class="rounded-3xl border border-amber-400/20 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-white">
+                    <a href="{{ url_for('core.research', query=item.symbol) }}" class="transition hover:text-sky-200">{{ item.symbol }}</a> · {{ item.name }}
+                  </p>
+                  <p class="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{{ item.recommendation_label }}</p>
+                </div>
+              </div>
+              <ul class="mt-3 space-y-2 text-sm leading-7 text-amber-50/90">
+                {% for note in item.risk_notes %}
+                  <li>{{ note }}</li>
+                {% endfor %}
+              </ul>
+            </article>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+              当前没有需要额外升级提示的事件联动风险。
+            </div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>
@@ -255,9 +329,9 @@
 
       <article class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
         <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Current Watchlist</p>
-        <h3 class="mt-2 text-2xl font-semibold text-white">当前监控标的</h3>
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
-          {% for item in workspace.top_watchlist %}
+        <h3 class="mt-2 text-2xl font-semibold text-white">建议关联标的事件摘要</h3>
+        <div class="mt-4 grid gap-3">
+          {% for item in workspace.market_event_context.symbol_summaries %}
             <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
               <div class="flex items-center justify-between gap-4">
                 <div>
@@ -266,18 +340,37 @@
                     <a href="{{ url_for('core.research', query=item.symbol) }}" class="transition hover:text-sky-200">{{ item.symbol }}</a>
                   </p>
                 </div>
-                {% if item.monitoring_enabled %}
-                  <span class="rounded-full bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">On</span>
-                {% else %}
-                  <span class="rounded-full bg-slate-300/10 px-3 py-1 text-xs font-medium text-slate-300">Off</span>
-                {% endif %}
+                <div class="text-right">
+                  <span class="rounded-full {% if item.highest_severity == 'high' %}bg-rose-300/15 text-rose-200{% elif item.highest_severity == 'medium' %}bg-amber-300/15 text-amber-200{% else %}bg-sky-300/15 text-sky-200{% endif %} px-3 py-1 text-xs font-medium uppercase tracking-[0.16em]">
+                    {{ item.highest_severity }}
+                  </span>
+                  <p class="mt-2 text-xs text-slate-500">{{ item.recommendation_label }} · {{ item.confidence }}</p>
+                </div>
               </div>
-              <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.latest_reason }}</p>
-              <p class="mt-3 text-xs text-slate-500">建议：{{ item.latest_recommendation | upper }} · 置信度 {{ "%.0f"|format(item.latest_confidence * 100) }}%</p>
+              <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.latest_event_title }}</p>
+              <p class="mt-2 text-xs text-slate-500">最近事件日期 {{ item.latest_event_date }} · 共 {{ item.event_count }} 条，其中未来事件 {{ item.upcoming_count }} 条</p>
+              <div class="mt-3 space-y-2">
+                {% for event in item.events %}
+                  <div class="rounded-2xl border border-slate-800/80 bg-slate-900/70 px-3 py-3">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-xs font-medium text-white">{{ event.title }}</p>
+                      <span class="text-[11px] uppercase tracking-[0.16em] text-slate-500">{{ event.event_date }} · {{ event.timing }}</span>
+                    </div>
+                    <p class="mt-2 text-xs leading-6 text-slate-400">{{ event.detail }}</p>
+                  </div>
+                {% endfor %}
+              </div>
+              {% if item.risk_notes %}
+                <ul class="mt-3 space-y-1 text-xs text-amber-200">
+                  {% for note in item.risk_notes %}
+                    <li>{{ note }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
             </article>
           {% else %}
             <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
-              当前没有监控标的。
+              当前没有已持久化的 symbol 级 market events 可用于建议联动展示。
             </div>
           {% endfor %}
         </div>
