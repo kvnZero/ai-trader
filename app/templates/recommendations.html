@@ -109,6 +109,88 @@
       </article>
     </section>
 
+    <section class="rounded-[2rem] border border-rose-400/20 bg-rose-300/5 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-rose-200/80">Holding Risk Overview</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">当前持仓优先处理项</h3>
+        </div>
+        <span class="rounded-full border border-rose-400/30 bg-rose-300/10 px-3 py-1 text-xs font-medium text-rose-100">
+          高风险 {{ workspace.portfolio_risk_overview.high_risk_count }} / {{ workspace.portfolio_risk_overview.held_symbol_count }}
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
+        <div class="space-y-3">
+          {% for item in workspace.portfolio_risk_overview.items[:4] %}
+            <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-white">{{ item.name }}</p>
+                  <p class="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
+                    <a href="{{ url_for('core.research', query=item.symbol) }}" class="transition hover:text-sky-200">{{ item.symbol }}</a>
+                    · {{ item.portfolio_action_label }}
+                  </p>
+                </div>
+                <div class="text-right">
+                  <span class="rounded-full {% if item.portfolio_action in ['trim', 'reduce'] %}bg-rose-300/15 text-rose-200{% elif item.portfolio_action == 'watch' %}bg-amber-300/15 text-amber-200{% else %}bg-emerald-300/15 text-emerald-200{% endif %} px-3 py-1 text-xs font-medium uppercase tracking-[0.16em]">
+                    {{ item.current_action_label or "--" }}
+                  </span>
+                  <p class="mt-2 text-xs text-slate-500">{{ item.current_confidence or "--" }}</p>
+                </div>
+              </div>
+              <p class="mt-3 text-sm leading-7 text-slate-300">{{ item.portfolio_action_reason }}</p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                {% if item.high_severity_event_count %}
+                  <span class="rounded-full border border-rose-400/20 bg-rose-300/10 px-3 py-1 text-xs text-rose-100">高优事件 {{ item.high_severity_event_count }}</span>
+                {% endif %}
+                {% if item.open_high_issue_count %}
+                  <span class="rounded-full border border-amber-400/20 bg-amber-300/10 px-3 py-1 text-xs text-amber-100">高优问题 {{ item.open_high_issue_count }}</span>
+                {% endif %}
+                {% if item.lifecycle_status_label %}
+                  <span class="rounded-full border border-slate-800/80 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">{{ item.lifecycle_status_label }}</span>
+                {% endif %}
+              </div>
+              {% if item.risk_flags %}
+                <ul class="mt-3 space-y-1 text-xs text-amber-200">
+                  {% for note in item.risk_flags[:3] %}
+                    <li>{{ note }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </article>
+          {% else %}
+            <div class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+              当前没有已录入持仓的风险概览数据。
+            </div>
+          {% endfor %}
+        </div>
+
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-slate-500">只读摘要</p>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <p class="text-xs text-slate-500">减仓 / 降敞口</p>
+              <p class="mt-1 text-2xl font-semibold text-rose-200">
+                {{ workspace.portfolio_risk_overview.action_counts.trim + workspace.portfolio_risk_overview.action_counts.reduce }}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-500">继续观察</p>
+              <p class="mt-1 text-2xl font-semibold text-amber-200">{{ workspace.portfolio_risk_overview.action_counts.watch }}</p>
+            </div>
+          </div>
+          <div class="mt-4 space-y-2 text-sm text-slate-300">
+            {% for item in workspace.portfolio_summary.warnings[:3] %}
+              <p>{{ item }}</p>
+            {% else %}
+              <p>持仓风险概览不会改写底层规则，只把当前组合里最需要优先处理的持仓抬出来。</p>
+            {% endfor %}
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>

@@ -38,13 +38,16 @@ from app.persistence import (
     DEFAULT_CASH_ACCOUNT_KEY,
     AlertRepository,
     AlertRow,
+    IssueLedgerRepository,
     MarketEventRepository,
     PortfolioCashRepository,
     PortfolioHoldingRepository,
     RecommendationEventRepository,
+    RecommendationSnapshotRepository,
+    SignalLifecycleRepository,
     WatchlistRepository,
 )
-from app.portfolio import build_portfolio_summary
+from app.portfolio import build_portfolio_risk_overview, build_portfolio_summary
 
 bp = Blueprint("core", __name__)
 
@@ -229,12 +232,27 @@ def _market_event_repository() -> MarketEventRepository:
     return current_app.config["TRADER_MARKET_EVENT_REPOSITORY"]
 
 
+def _issue_ledger_repository() -> IssueLedgerRepository | None:
+    repository = current_app.config.get("TRADER_ISSUE_LEDGER_REPOSITORY")
+    return repository if isinstance(repository, IssueLedgerRepository) or repository is not None else None
+
+
+def _recommendation_snapshot_repository() -> RecommendationSnapshotRepository | None:
+    repository = current_app.config.get("TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY")
+    return (
+        repository
+        if isinstance(repository, RecommendationSnapshotRepository) or repository is not None
+        else None
+    )
+
+
 def _monitoring_scheduler():
     return current_app.config["TRADER_MONITORING_SCHEDULER"]
 
 
-def _signal_lifecycle_repository():
-    return current_app.config.get("TRADER_SIGNAL_LIFECYCLE_REPOSITORY")
+def _signal_lifecycle_repository() -> SignalLifecycleRepository | None:
+    repository = current_app.config.get("TRADER_SIGNAL_LIFECYCLE_REPOSITORY")
+    return repository if isinstance(repository, SignalLifecycleRepository) or repository is not None else None
 
 
 def _embedded_monitoring_enabled() -> bool:
@@ -612,6 +630,7 @@ def system_capabilities() -> str:
         sentiment_mode="request",
         sentiment_status=sentiment_source_health.get("status", "healthy"),
     )
+    portfolio_risk_overview = _build_portfolio_risk_overview()
     evaluation_report = _build_evaluation_report(
         symbol=selected_symbol or None,
         recent_runs=recent_runs,
@@ -636,6 +655,7 @@ def system_capabilities() -> str:
         monitoring_status=monitoring_status,
         sentiment_source_health=sentiment_source_health,
         worker_health=worker_health,
+        portfolio_risk_overview=_to_template_namespace(portfolio_risk_overview),
         evaluation_report=evaluation_report,
         replay_report=replay_report,
         backtest_report=backtest_report,
@@ -1074,6 +1094,7 @@ def _build_recommendations_workspace() -> dict[str, object]:
     market_event_context = _build_recommendation_market_event_context(
         watchlist_rows=watchlist_rows
     )
+    portfolio_risk_overview = _build_portfolio_risk_overview()
     return {
         "watchlist_count": len(watchlist_rows),
         "enabled_count": len([row for row in watchlist_rows if row.monitoring_enabled]),
@@ -1102,8 +1123,60 @@ def _build_recommendations_workspace() -> dict[str, object]:
             ),
         },
         "portfolio_summary": portfolio_summary,
+        "portfolio_risk_overview": _to_template_namespace(portfolio_risk_overview),
         "market_event_context": market_event_context,
         "signal_lifecycle": _to_template_namespace(lifecycle_workspace),
+    }
+
+
+def _build_portfolio_risk_overview() -> dict[str, object]:
+    report = build_portfolio_risk_overview(
+        holding_repository=_portfolio_holding_repository(),
+        market_event_repository=_market_event_repository(),
+        signal_lifecycle_repository=_signal_lifecycle_repository(),
+        issue_repository=_issue_ledger_repository(),
+        recommendation_snapshot_repository=_recommendation_snapshot_repository(),
+    )
+    return {
+        "generated_at": report.generated_at,
+        "held_symbol_count": report.held_symbol_count,
+        "action_counts": report.action_counts,
+        "high_risk_count": report.high_risk_count,
+        "items": [
+            {
+                "symbol": item.symbol,
+                "name": item.name,
+                "current_action": item.current_action,
+                "current_action_label": _ACTION_LABELS.get(
+                    item.current_action,
+                    str(item.current_action).upper() if item.current_action else None,
+                ),
+                "current_confidence": (
+                    f"{item.current_confidence:.0%}"
+                    if item.current_confidence is not None
+                    else None
+                ),
+                "portfolio_action": item.portfolio_action,
+                "portfolio_action_label": {
+                    "trim": "减仓",
+                    "reduce": "降低敞口",
+                    "watch": "继续观察",
+                    "hold": "继续持有",
+                }.get(item.portfolio_action, item.portfolio_action),
+                "portfolio_action_reason": item.portfolio_action_reason,
+                "high_severity_event_count": item.high_severity_event_count,
+                "open_high_issue_count": item.open_high_issue_count,
+                "lifecycle_status": item.lifecycle_status,
+                "lifecycle_status_label": (
+                    _SIGNAL_LIFECYCLE_LABELS.get(item.lifecycle_status, item.lifecycle_status)
+                    if item.lifecycle_status
+                    else None
+                ),
+                "lifecycle_reason": item.lifecycle_reason,
+                "risk_flags": item.risk_flags,
+            }
+            for item in report.items
+        ],
     }
 
 

@@ -9,10 +9,12 @@ from app.persistence import (
     AlertRepository,
     PortfolioCashRepository,
     PortfolioHoldingRepository,
+    IssueLedgerRepository,
     MarketEventRepository,
     PortfolioSettingsRepository,
     RecommendationEventRepository,
     RecommendationSnapshotRepository,
+    SignalLifecycleRepository,
     WatchlistRepository,
     init_database,
 )
@@ -53,6 +55,8 @@ class PortfolioWebViewTests(TestCase):
             app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = RecommendationEventRepository(database)
             app.config["TRADER_PORTFOLIO_SETTINGS_REPOSITORY"] = PortfolioSettingsRepository(database)
             app.config["TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY"] = RecommendationSnapshotRepository(database)
+            app.config["TRADER_ISSUE_LEDGER_REPOSITORY"] = IssueLedgerRepository(database)
+            app.config["TRADER_SIGNAL_LIFECYCLE_REPOSITORY"] = SignalLifecycleRepository(database)
             app.config["TRADER_PORTFOLIO_HOLDING_REPOSITORY"] = holding_repository
             app.config["TRADER_PORTFOLIO_CASH_REPOSITORY"] = cash_repository
 
@@ -63,10 +67,68 @@ class PortfolioWebViewTests(TestCase):
             body = response.get_data(as_text=True)
             self.assertIn("当前持仓与现金", body)
             self.assertIn("当前账户状态如何影响建议仓位", body)
+            self.assertIn("当前持仓优先处理项", body)
             self.assertIn("Cash Balance", body)
             self.assertIn("120000.0", body)
             self.assertIn("600519 已有持仓已覆盖目标仓位，本次不新增。", body)
             self.assertIn("取现金比例与剩余风险预算的较小值。", body)
+
+    def test_system_page_shows_read_only_holding_risk_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            database = init_database(str(Path(tmpdir) / "portfolio-system.db"))
+            watchlist_repository = WatchlistRepository(database)
+            holding_repository = PortfolioHoldingRepository(database)
+            cash_repository = PortfolioCashRepository(database)
+            recommendation_event_repository = RecommendationEventRepository(database)
+
+            watchlist_repository.create_stock("600519", "贵州茅台")
+            watchlist_repository.record_refresh(
+                "600519",
+                latest_recommendation="watch",
+                latest_confidence=0.45,
+                latest_reason="趋势放缓，先观察。",
+                status="active",
+                status_label="监控中",
+                last_analysis_at="2026-05-13 10:30",
+            )
+            holding_repository.upsert_holding(
+                symbol="600519",
+                name="贵州茅台",
+                shares=100,
+                avg_cost=1500.0,
+                last_price=1480.0,
+            )
+            cash_repository.upsert_balance(balance=50000.0)
+            recommendation_event_repository.create_event(
+                symbol="600519",
+                previous_action="buy",
+                current_action="watch",
+                confidence=0.45,
+                summary="趋势放缓，切回观察。",
+            )
+
+            app = create_app()
+            app.config["TESTING"] = True
+            app.config["TRADER_DATABASE"] = database
+            app.config["TRADER_WATCHLIST_REPOSITORY"] = watchlist_repository
+            app.config["TRADER_ALERT_REPOSITORY"] = AlertRepository(database)
+            app.config["TRADER_MARKET_EVENT_REPOSITORY"] = MarketEventRepository(database)
+            app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = recommendation_event_repository
+            app.config["TRADER_PORTFOLIO_SETTINGS_REPOSITORY"] = PortfolioSettingsRepository(database)
+            app.config["TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY"] = RecommendationSnapshotRepository(database)
+            app.config["TRADER_ISSUE_LEDGER_REPOSITORY"] = IssueLedgerRepository(database)
+            app.config["TRADER_SIGNAL_LIFECYCLE_REPOSITORY"] = SignalLifecycleRepository(database)
+            app.config["TRADER_PORTFOLIO_HOLDING_REPOSITORY"] = holding_repository
+            app.config["TRADER_PORTFOLIO_CASH_REPOSITORY"] = cash_repository
+
+            with app.test_client() as client:
+                response = client.get("/system")
+
+            self.assertEqual(response.status_code, 200)
+            body = response.get_data(as_text=True)
+            self.assertIn("持仓风险只读摘要", body)
+            self.assertIn("去 recommendations 处理", body)
+            self.assertIn("600519", body)
 
     def test_account_state_form_persists_to_repositories_and_redirects(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -83,6 +145,8 @@ class PortfolioWebViewTests(TestCase):
             app.config["TRADER_RECOMMENDATION_EVENT_REPOSITORY"] = RecommendationEventRepository(database)
             app.config["TRADER_PORTFOLIO_SETTINGS_REPOSITORY"] = PortfolioSettingsRepository(database)
             app.config["TRADER_RECOMMENDATION_SNAPSHOT_REPOSITORY"] = RecommendationSnapshotRepository(database)
+            app.config["TRADER_ISSUE_LEDGER_REPOSITORY"] = IssueLedgerRepository(database)
+            app.config["TRADER_SIGNAL_LIFECYCLE_REPOSITORY"] = SignalLifecycleRepository(database)
             app.config["TRADER_PORTFOLIO_HOLDING_REPOSITORY"] = holding_repository
             app.config["TRADER_PORTFOLIO_CASH_REPOSITORY"] = cash_repository
 
