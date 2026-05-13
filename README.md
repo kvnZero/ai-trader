@@ -47,6 +47,7 @@ The status script prints:
 - replay summary
 - backtest summary
 - recent recommendation snapshots
+- recent market events
 
 Watch Tailwind CSS:
 
@@ -65,12 +66,14 @@ npm run build
 - `web`: Flask UI and API surface
 - `monitoring worker`: persistent watchlist refresh loop
 - `sentiment worker`: persistent sentiment ingestion loop
+- `events worker`: persistent market event ingestion loop
 
 You can also run workers independently:
 
 ```bash
 uv run python -m app.workers.monitoring
 uv run python -m app.workers.sentiment
+uv run python -m app.workers.events
 ```
 
 Disable embedded monitoring inside the web process when using standalone workers:
