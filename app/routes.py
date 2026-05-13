@@ -47,7 +47,11 @@ from app.persistence import (
     SignalLifecycleRepository,
     WatchlistRepository,
 )
-from app.portfolio import build_portfolio_risk_overview, build_portfolio_summary
+from app.portfolio import (
+    build_portfolio_rebalance_playbook,
+    build_portfolio_risk_overview,
+    build_portfolio_summary,
+)
 
 bp = Blueprint("core", __name__)
 
@@ -1095,6 +1099,11 @@ def _build_recommendations_workspace() -> dict[str, object]:
         watchlist_rows=watchlist_rows
     )
     portfolio_risk_overview = _build_portfolio_risk_overview()
+    portfolio_rebalance_playbook = _build_portfolio_rebalance_playbook(
+        account_state=account_state,
+        portfolio_summary=portfolio_summary,
+        portfolio_risk_overview=portfolio_risk_overview,
+    )
     return {
         "watchlist_count": len(watchlist_rows),
         "enabled_count": len([row for row in watchlist_rows if row.monitoring_enabled]),
@@ -1124,6 +1133,7 @@ def _build_recommendations_workspace() -> dict[str, object]:
         },
         "portfolio_summary": portfolio_summary,
         "portfolio_risk_overview": _to_template_namespace(portfolio_risk_overview),
+        "portfolio_rebalance_playbook": _to_template_namespace(portfolio_rebalance_playbook),
         "market_event_context": market_event_context,
         "signal_lifecycle": _to_template_namespace(lifecycle_workspace),
     }
@@ -1176,6 +1186,40 @@ def _build_portfolio_risk_overview() -> dict[str, object]:
                 "risk_flags": item.risk_flags,
             }
             for item in report.items
+        ],
+    }
+
+
+def _build_portfolio_rebalance_playbook(
+    *,
+    account_state: dict[str, object],
+    portfolio_summary: object,
+    portfolio_risk_overview: dict[str, object],
+) -> dict[str, object]:
+    report = build_portfolio_rebalance_playbook(
+        account_state=account_state,
+        portfolio_summary=portfolio_summary,
+        portfolio_risk_overview=portfolio_risk_overview,
+    )
+    return {
+        "generated_at": report.generated_at,
+        "action_counts": report.action_counts,
+        "actions": [
+            {
+                "symbol": item.symbol,
+                "action": item.action,
+                "action_label": {
+                    "buy_add": "增持/建仓",
+                    "trim_reduce": "减仓/去风险",
+                    "hold_monitor": "持有观察",
+                    "no_action": "无需动作",
+                }.get(item.action, item.action),
+                "current_weight": item.current_weight,
+                "target_delta": item.target_delta,
+                "reason": item.reason,
+                "priority": item.priority,
+            }
+            for item in report.actions
         ],
     }
 
