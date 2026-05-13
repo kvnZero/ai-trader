@@ -603,6 +603,27 @@ def market_events_api() -> tuple[object, int]:
     ), 200
 
 
+@bp.get("/api/events/stats")
+def market_event_stats_api() -> tuple[object, int]:
+    symbol = request.args.get("symbol", "").strip() or None
+    event_type = request.args.get("event_type", "").strip() or None
+    severity = request.args.get("severity", "").strip() or None
+    report = _market_event_repository().build_stats_report(
+        symbol=symbol,
+        event_type=event_type,
+        severity=severity,
+    )
+    return jsonify(
+        {
+            "status": "ok",
+            "symbol": symbol,
+            "event_type": event_type,
+            "severity": severity,
+            "report": to_json_ready(report),
+        }
+    ), 200
+
+
 @bp.get("/api/system/snapshots")
 def system_snapshots_api() -> tuple[object, int]:
     limit = _get_positive_int_arg("limit", default=20)
