@@ -198,6 +198,25 @@ SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS portfolio_holdings (
+        symbol TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        shares REAL NOT NULL DEFAULT 0.0,
+        avg_cost REAL NOT NULL DEFAULT 0.0,
+        last_price REAL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS portfolio_cash_balances (
+        account_key TEXT PRIMARY KEY,
+        balance REAL NOT NULL DEFAULT 0.0,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS market_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         natural_key TEXT NOT NULL UNIQUE,
@@ -241,6 +260,7 @@ class Database:
             self._ensure_alert_columns(conn)
             self._ensure_issue_ledger_columns(conn)
             self._ensure_signal_lifecycle_indexes(conn)
+            self._ensure_portfolio_holdings_indexes(conn)
             conn.commit()
 
     def _ensure_alert_columns(self, conn: sqlite3.Connection) -> None:
@@ -282,6 +302,14 @@ class Database:
             """
             CREATE INDEX IF NOT EXISTS idx_signal_lifecycle_last_signal
             ON signal_lifecycle(last_signal_at DESC)
+            """
+        )
+
+    def _ensure_portfolio_holdings_indexes(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_portfolio_holdings_updated_at
+            ON portfolio_holdings(updated_at DESC)
             """
         )
 

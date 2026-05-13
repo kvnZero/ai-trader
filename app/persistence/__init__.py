@@ -11,6 +11,14 @@ from app.persistence.events import (
     MarketEventStatsRow,
 )
 from app.persistence.portfolio import DEFAULT_PORTFOLIO_PROFILE, PortfolioSettingsRepository, PortfolioSettingsRow
+from app.persistence.portfolio_state import (
+    DEFAULT_CASH_ACCOUNT_KEY,
+    PortfolioCashBalanceRow,
+    PortfolioCashRepository,
+    PortfolioHoldingRepository,
+    PortfolioHoldingRow,
+    PortfolioStateSummary,
+)
 from app.persistence.sentiment import (
     DEFAULT_SENTIMENT_WORKER_NAME,
     SentimentIngestionRunRow,
@@ -53,6 +61,12 @@ __all__ = [
     "DEFAULT_PORTFOLIO_PROFILE",
     "PortfolioSettingsRepository",
     "PortfolioSettingsRow",
+    "DEFAULT_CASH_ACCOUNT_KEY",
+    "PortfolioCashBalanceRow",
+    "PortfolioCashRepository",
+    "PortfolioHoldingRepository",
+    "PortfolioHoldingRow",
+    "PortfolioStateSummary",
     "RecommendationSnapshotRepository",
     "RecommendationSnapshotRow",
     "WatchlistRepository",
