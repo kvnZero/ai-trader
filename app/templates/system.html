@@ -72,6 +72,32 @@
       </div>
     </section>
 
+    <section class="rounded-[2rem] border border-sky-400/20 bg-sky-300/5 p-6">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <p class="text-xs uppercase tracking-[0.22em] text-sky-200/80">Portfolio Entry</p>
+          <h3 class="mt-2 text-2xl font-semibold text-white">持仓维护入口</h3>
+        </div>
+        <a href="{{ url_for('core.recommendations') }}" class="rounded-full border border-sky-400/30 bg-sky-300/10 px-4 py-2 text-xs font-medium text-sky-100 transition hover:border-sky-300/60 hover:bg-sky-300/15">
+          打开 recommendations 页维护
+        </a>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-3">
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-sm font-semibold text-white">当前支持</p>
+          <p class="mt-2 text-sm leading-7 text-slate-300">在 recommendations 页录入现金比例、当前持仓 symbol / 名称 / 权重，并即时重算建议新增仓位。</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-sm font-semibold text-white">作用方式</p>
+          <p class="mt-2 text-sm leading-7 text-slate-300">现有持仓会占用行业、主题和总风险预算；现金比例会限制本轮可新增仓位。</p>
+        </article>
+        <article class="rounded-3xl border border-slate-800/80 bg-slate-950/60 p-4">
+          <p class="text-sm font-semibold text-white">实现边界</p>
+          <p class="mt-2 text-sm leading-7 text-slate-300">当前为展示层维护入口，不修改持久化 schema，也不改变组合计算逻辑。</p>
+        </article>
+      </div>
+    </section>
+
     <section class="rounded-[2rem] border border-slate-800/80 bg-slate-900/55 p-6">
       <div class="flex items-center justify-between gap-4">
         <div>

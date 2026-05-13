@@ -120,6 +120,125 @@
         </span>
       </div>
 
+      <div class="mt-4 grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+        <article class="rounded-3xl border border-emerald-400/20 bg-emerald-300/5 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.18em] text-emerald-200/80">Account State</p>
+              <h4 class="mt-2 text-lg font-semibold text-white">当前持仓与现金</h4>
+            </div>
+            <span class="rounded-full border border-emerald-400/30 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-100">
+              可新增 {{ workspace.portfolio_account.deployable_cash_pct }}%
+            </span>
+          </div>
+
+          <form action="{{ url_for('core.update_portfolio_account_state') }}" method="post" class="mt-4 space-y-4">
+            <label class="block">
+              <span class="text-xs uppercase tracking-[0.18em] text-slate-500">Cash Balance</span>
+              <input name="cash_balance" type="number" min="0" step="0.01" value="{{ workspace.portfolio_account.cash_balance }}" class="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400/40" />
+            </label>
+
+            <div class="grid gap-3">
+              {% for holding in workspace.portfolio_account.holdings %}
+                <div class="grid gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3 md:grid-cols-5">
+                  <input name="holding_symbol" value="{{ holding.symbol }}" placeholder="600519" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_name" value="{{ holding.name }}" placeholder="贵州茅台" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_shares" type="number" min="0" step="0.01" value="{{ holding.shares }}" placeholder="持股数量" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_avg_cost" type="number" min="0" step="0.01" value="{{ holding.avg_cost }}" placeholder="持仓成本" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_last_price" type="number" min="0" step="0.01" value="{{ holding.last_price or '' }}" placeholder="最新价" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input type="hidden" name="holding_notes" value="{{ holding.notes or '' }}" />
+                  <p class="md:col-span-5 text-xs text-slate-500">持仓权重 {{ holding.weight_pct }}% · 市值 {{ holding.market_value or holding.cost_basis }}</p>
+                </div>
+              {% endfor %}
+              {% for _ in range(3 - workspace.portfolio_account.holdings|length if workspace.portfolio_account.holdings|length < 3 else 1) %}
+                <div class="grid gap-3 rounded-2xl border border-dashed border-slate-800/80 bg-slate-950/40 p-3 md:grid-cols-5">
+                  <input name="holding_symbol" value="" placeholder="600519" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_name" value="" placeholder="股票名称" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_shares" type="number" min="0" step="0.01" value="" placeholder="持股数量" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_avg_cost" type="number" min="0" step="0.01" value="" placeholder="持仓成本" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input name="holding_last_price" type="number" min="0" step="0.01" value="" placeholder="最新价" class="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/40" />
+                  <input type="hidden" name="holding_notes" value="" />
+                </div>
+              {% endfor %}
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-4">
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">
+                <p class="text-xs uppercase tracking-[0.16em] text-slate-500">Holdings</p>
+                <p class="mt-2 text-lg font-semibold text-white">{{ workspace.portfolio_account.holdings_total_pct }}%</p>
+              </article>
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">
+                <p class="text-xs uppercase tracking-[0.16em] text-slate-500">Cash</p>
+                <p class="mt-2 text-lg font-semibold text-emerald-200">{{ workspace.portfolio_account.cash_pct }}%</p>
+              </article>
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">
+                <p class="text-xs uppercase tracking-[0.16em] text-slate-500">Planned Add</p>
+                <p class="mt-2 text-lg font-semibold text-sky-200">{{ workspace.portfolio_account.position_plan_total_pct }}%</p>
+              </article>
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-3">
+                <p class="text-xs uppercase tracking-[0.16em] text-slate-500">Net Liq.</p>
+                <p class="mt-2 text-lg font-semibold text-white">{{ workspace.portfolio_account.net_liquidation_value }}</p>
+              </article>
+            </div>
+
+            <div class="flex items-center justify-between gap-4">
+              <p class="text-sm leading-7 text-slate-400">
+                当前持仓会先占用行业/主题暴露和组合预算；现金上限会直接压缩下方新增建议仓位。
+              </p>
+              <button type="submit" class="rounded-2xl border border-emerald-400/30 bg-emerald-300/10 px-5 py-3 text-sm font-medium text-emerald-100 transition hover:border-emerald-300/60 hover:bg-emerald-300/15">
+                更新持仓状态
+              </button>
+            </div>
+          </form>
+        </article>
+
+        <article class="rounded-3xl border border-sky-400/20 bg-sky-300/5 p-4">
+          <p class="text-xs uppercase tracking-[0.18em] text-sky-200/80">Allocation Impact</p>
+          <h4 class="mt-2 text-lg font-semibold text-white">当前账户状态如何影响建议仓位</h4>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <div class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <p class="text-xs uppercase tracking-[0.16em] text-slate-500">新增仓位上限</p>
+              <p class="mt-2 text-2xl font-semibold text-white">{{ workspace.portfolio_account.deployable_cash_pct }}%</p>
+              <p class="mt-2 text-sm leading-7 text-slate-400">取现金比例与剩余风险预算的较小值。</p>
+            </div>
+            <div class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
+              <p class="text-xs uppercase tracking-[0.16em] text-slate-500">已占用预算</p>
+              <p class="mt-2 text-2xl font-semibold text-white">{{ "%.2f"|format(workspace.portfolio_summary.total_risk_budget_pct - workspace.portfolio_summary.remaining_risk_budget_pct) }}%</p>
+              <p class="mt-2 text-sm leading-7 text-slate-400">包含当前持仓已占用的预算和本轮建议新增权重。</p>
+            </div>
+          </div>
+
+          <div class="mt-4 space-y-3">
+            {% for item in workspace.portfolio_summary.position_plans %}
+              <article class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <p class="text-sm font-semibold text-white">{{ item.name }}</p>
+                    <p class="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{{ item.symbol }} · 新增 {{ item.proposed_weight_pct }}%</p>
+                  </div>
+                  <span class="rounded-full border border-sky-400/30 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-100">
+                    {{ item.recommendation | upper }}
+                  </span>
+                </div>
+                {% if item.notes %}
+                  <ul class="mt-3 space-y-1 text-xs text-amber-200">
+                    {% for note in item.notes %}
+                      <li>{{ note }}</li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="mt-3 text-sm text-slate-400">当前持仓与现金未对该标的产生额外约束。</p>
+                {% endif %}
+              </article>
+            {% else %}
+              <div class="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4 text-sm text-slate-400">
+                当前没有可执行的新增仓位建议，通常意味着预算、现金或现有持仓已经覆盖目标仓位。
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+      </div>
+
       <form action="{{ url_for('core.update_portfolio_settings') }}" method="post" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <label class="block">
           <span class="text-xs uppercase tracking-[0.18em] text-slate-500">Total Budget %</span>

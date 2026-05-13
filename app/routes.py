@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from statistics import mean
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
@@ -33,7 +34,16 @@ from app.modules.technical_analysis import (
 )
 from app.modules.technical_analysis.contracts import TechnicalAnalysisResult
 from app.modules.trader_agent import build_default_trader_agent_service
-from app.persistence import AlertRepository, AlertRow, MarketEventRepository, RecommendationEventRepository, WatchlistRepository
+from app.persistence import (
+    DEFAULT_CASH_ACCOUNT_KEY,
+    AlertRepository,
+    AlertRow,
+    MarketEventRepository,
+    PortfolioCashRepository,
+    PortfolioHoldingRepository,
+    RecommendationEventRepository,
+    WatchlistRepository,
+)
 from app.portfolio import build_portfolio_summary
 
 bp = Blueprint("core", __name__)
@@ -93,6 +103,126 @@ def _recommendation_event_repository() -> RecommendationEventRepository:
 
 def _portfolio_settings_repository():
     return current_app.config["TRADER_PORTFOLIO_SETTINGS_REPOSITORY"]
+
+
+def _portfolio_holding_repository() -> PortfolioHoldingRepository:
+    repository = current_app.config.get("TRADER_PORTFOLIO_HOLDING_REPOSITORY")
+    if repository is not None:
+        return repository
+    database = current_app.config["TRADER_DATABASE"]
+    repository = PortfolioHoldingRepository(database)
+    current_app.config["TRADER_PORTFOLIO_HOLDING_REPOSITORY"] = repository
+    return repository
+
+
+def _portfolio_cash_repository() -> PortfolioCashRepository:
+    repository = current_app.config.get("TRADER_PORTFOLIO_CASH_REPOSITORY")
+    if repository is not None:
+        return repository
+    database = current_app.config["TRADER_DATABASE"]
+    repository = PortfolioCashRepository(database)
+    current_app.config["TRADER_PORTFOLIO_CASH_REPOSITORY"] = repository
+    return repository
+
+
+def _coerce_portfolio_float(
+    value: object,
+    *,
+    default: float,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    try:
+        resolved = float(value)
+    except (TypeError, ValueError):
+        resolved = default
+    if minimum is not None:
+        resolved = max(minimum, resolved)
+    if maximum is not None:
+        resolved = min(maximum, resolved)
+    return round(resolved, 2)
+
+
+def _parse_portfolio_holdings_from_form() -> list[dict[str, object]]:
+    symbols = request.form.getlist("holding_symbol")
+    names = request.form.getlist("holding_name")
+    shares_list = request.form.getlist("holding_shares")
+    avg_costs = request.form.getlist("holding_avg_cost")
+    last_prices = request.form.getlist("holding_last_price")
+    notes_list = request.form.getlist("holding_notes")
+    holdings: list[dict[str, object]] = []
+    seen: set[str] = set()
+    row_count = max(len(symbols), len(names), len(shares_list), len(avg_costs), len(last_prices), len(notes_list))
+    for index in range(row_count):
+        raw_symbol = symbols[index] if index < len(symbols) else ""
+        raw_name = names[index] if index < len(names) else ""
+        raw_shares = shares_list[index] if index < len(shares_list) else ""
+        raw_avg_cost = avg_costs[index] if index < len(avg_costs) else ""
+        raw_last_price = last_prices[index] if index < len(last_prices) else ""
+        raw_notes = notes_list[index] if index < len(notes_list) else ""
+        try:
+            symbol = normalize_symbol(raw_symbol)
+        except MarketDataValidationError:
+            continue
+        if symbol in seen:
+            continue
+        shares = _coerce_portfolio_float(raw_shares, default=0.0, minimum=0.0)
+        avg_cost = _coerce_portfolio_float(raw_avg_cost, default=0.0, minimum=0.0)
+        last_price = _coerce_portfolio_float(raw_last_price, default=0.0, minimum=0.0)
+        if shares <= 0 or avg_cost <= 0:
+            continue
+        seen.add(symbol)
+        holdings.append(
+            {
+                "symbol": symbol,
+                "name": raw_name.strip() or symbol,
+                "shares": shares,
+                "avg_cost": avg_cost,
+                "last_price": last_price if last_price > 0 else None,
+                "notes": raw_notes.strip() or None,
+            }
+        )
+    return holdings
+
+
+def _portfolio_account_state() -> dict[str, object] | None:
+    provider = current_app.config.get("TRADER_PORTFOLIO_ACCOUNT_STATE_PROVIDER")
+    if callable(provider):
+        payload = provider()
+        if isinstance(payload, dict):
+            return payload
+    payload = current_app.config.get("TRADER_PORTFOLIO_ACCOUNT_STATE")
+    if isinstance(payload, dict):
+        return payload
+    holdings = _portfolio_holding_repository().list_rows()
+    cash_row = _portfolio_cash_repository().get_balance(DEFAULT_CASH_ACCOUNT_KEY)
+    cash_balance = float(cash_row.balance) if cash_row is not None else 0.0
+    total_market_value = sum((row.market_value or row.cost_basis) for row in holdings)
+    net_liquidation_value = total_market_value + cash_balance
+    cash_pct = 100.0 if net_liquidation_value <= 0 else round((cash_balance / net_liquidation_value) * 100, 2)
+    resolved_holdings: list[dict[str, object]] = []
+    for row in holdings:
+        market_value = row.market_value or row.cost_basis
+        weight_pct = 0.0 if net_liquidation_value <= 0 else round((market_value / net_liquidation_value) * 100, 2)
+        resolved_holdings.append(
+            {
+                "symbol": row.symbol,
+                "name": row.name,
+                "shares": row.shares,
+                "avg_cost": row.avg_cost,
+                "last_price": row.last_price,
+                "notes": row.notes,
+                "market_value": round(market_value, 2),
+                "cost_basis": round(row.cost_basis, 2),
+                "weight_pct": weight_pct,
+            }
+        )
+    return {
+        "cash_pct": cash_pct,
+        "cash_balance": round(cash_balance, 2),
+        "holdings": resolved_holdings,
+        "net_liquidation_value": round(net_liquidation_value, 2),
+    }
 
 
 def _market_event_repository() -> MarketEventRepository:
@@ -374,6 +504,39 @@ def update_portfolio_settings() -> str:
         max_single_position_pct=float(request.form.get("max_single_position_pct", "20") or 20),
         max_industry_exposure_pct=float(request.form.get("max_industry_exposure_pct", "35") or 35),
         max_theme_overlap_pct=float(request.form.get("max_theme_overlap_pct", "45") or 45),
+    )
+    return redirect(url_for("core.recommendations"))
+
+
+@bp.post("/recommendations/account-state")
+def update_portfolio_account_state() -> str:
+    holding_repository = _portfolio_holding_repository()
+    cash_repository = _portfolio_cash_repository()
+    existing_symbols = {row.symbol for row in holding_repository.list_rows()}
+    submitted_holdings = _parse_portfolio_holdings_from_form()
+    submitted_symbols = {item["symbol"] for item in submitted_holdings}
+
+    for item in submitted_holdings:
+        holding_repository.upsert_holding(
+            symbol=item["symbol"],
+            name=item["name"],
+            shares=item["shares"],
+            avg_cost=item["avg_cost"],
+            last_price=item["last_price"],
+            notes=item["notes"],
+        )
+
+    for symbol in existing_symbols - submitted_symbols:
+        holding_repository.delete_holding(symbol)
+
+    cash_balance = _coerce_portfolio_float(
+        request.form.get("cash_balance"),
+        default=0.0,
+        minimum=0.0,
+    )
+    cash_repository.upsert_balance(
+        account_key=DEFAULT_CASH_ACCOUNT_KEY,
+        balance=cash_balance,
     )
     return redirect(url_for("core.recommendations"))
 
@@ -874,11 +1037,29 @@ def _build_recommendations_workspace() -> dict[str, object]:
     recent_activity = _build_recent_activity(limit=6)
     lifecycle_workspace = _build_signal_lifecycle_workspace(rows=watchlist_rows, limit=4)
     portfolio_settings = _portfolio_settings_repository().get_settings()
+    account_state = _portfolio_account_state()
     portfolio_summary = build_portfolio_summary(
         watchlist_rows=watchlist_rows,
         company_dictionary=build_default_entity_mapping_service().company_dictionary,
         settings=portfolio_settings,
+        account_state={
+            "cash_pct": account_state.get("cash_pct", 100.0),
+            "holdings": [
+                {
+                    "symbol": item["symbol"],
+                    "weight_pct": item.get("weight_pct", 0.0),
+                    "name": item.get("name"),
+                }
+                for item in account_state.get("holdings", [])
+            ],
+        },
     )
+    holdings_total_pct = round(
+        sum(float(item.get("weight_pct", 0.0)) for item in account_state.get("holdings", [])),
+        2,
+    )
+    cash_pct = float(account_state.get("cash_pct", 100.0))
+    deployable_cash_pct = round(min(cash_pct, portfolio_summary.remaining_risk_budget_pct), 2)
     no_trade_queue = [
         row
         for row in watchlist_rows
@@ -907,9 +1088,22 @@ def _build_recommendations_workspace() -> dict[str, object]:
         "recent_activity": recent_activity,
         "alerts": alerts,
         "portfolio_settings": portfolio_settings,
+        "portfolio_account": {
+            "cash_pct": cash_pct,
+            "cash_balance": float(account_state.get("cash_balance", 0.0)),
+            "holdings": account_state.get("holdings", []),
+            "holdings_total_pct": holdings_total_pct,
+            "net_exposure_pct": round(holdings_total_pct + cash_pct, 2),
+            "net_liquidation_value": float(account_state.get("net_liquidation_value", 0.0)),
+            "deployable_cash_pct": deployable_cash_pct,
+            "position_plan_total_pct": round(
+                sum(item.proposed_weight_pct for item in portfolio_summary.position_plans),
+                2,
+            ),
+        },
         "portfolio_summary": portfolio_summary,
         "market_event_context": market_event_context,
-        "signal_lifecycle": lifecycle_workspace,
+        "signal_lifecycle": _to_template_namespace(lifecycle_workspace),
     }
 
 
@@ -1654,6 +1848,14 @@ def _build_signal_lifecycle_workspace(
         "state_counts": state_counts,
         "items": items,
     }
+
+
+def _to_template_namespace(value: object) -> object:
+    if isinstance(value, dict):
+        return SimpleNamespace(**{key: _to_template_namespace(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return [_to_template_namespace(item) for item in value]
+    return value
 
 
 def _build_signal_lifecycle_view_model(
